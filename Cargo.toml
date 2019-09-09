@@ -8,6 +8,9 @@ edition = "2018"
 name = "postgres_query"
 proc-macro = true
 
+[[example]]
+name = "basic_select"
+
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
