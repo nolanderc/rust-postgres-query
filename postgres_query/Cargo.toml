@@ -15,4 +15,4 @@ name = "basic_select"
 
 [dependencies]
 postgres = "0.15.2"
-postgres_query_derive = { path = "../postgres_query_derive" }
+postgres_query_derive = { version = "0.1.0", path = "../postgres_query_derive" }
