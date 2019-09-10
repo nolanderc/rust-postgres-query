@@ -1,3 +1,32 @@
+//!
+//! Exposes the trait `Query` which can be used to execute queries against a 
+//! [rust-postgres](https://docs.rs/postgres/0.15.2/postgres/index.html)
+//! database connection.
+//!
+//! The trait `Query` may be derived and used as follows:
+//! ```
+//! # use postgres_query_derive::*;
+//! # use postgres_query::*;
+//! # use postgres::{Connection, TlsMode};
+//! # let connection = Connection::connect("postgres://postgres@localhost:5432", TlsMode::None).unwrap();
+//! # connection.execute("CREATE TABLE IF NOT EXISTS people ( name TEXT, age INTEGER )", &[]).unwrap();
+//! #[derive(Query)]
+//! #[query(sql = "SELECT * FROM people WHERE name = $name AND age >= $min_age")]
+//! struct PersonByName {
+//!     name: String,
+//!     min_age: i32,
+//! }
+//!
+//! let get_person = PersonByName {
+//!     name: "Josh".to_owned(),
+//!     min_age: 19,
+//! };
+//!
+//! let rows = get_person.query(&connection).unwrap();
+//! ```
+//!
+
+
 pub use postgres_query_derive::*;
 
 use postgres::rows::Rows;
