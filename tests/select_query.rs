@@ -1,19 +1,30 @@
+use postgres::types::ToSql;
+use postgres_query::Query;
 
-use postgres_query::*;
-
-define_query!(Query, "SELECT id FROM users WHERE name = $name");
+#[derive(Query)]
+#[query(sql = "SELECT * FROM users WHERE age > $age AND name > $name")]
+struct AgeQuery<'a, T>
+where
+    T: ToSql,
+{
+    name: &'a T,
+    age: i32,
+}
 
 #[test]
-fn define_query_basic() {
-    let name = "Jake";
+fn derive_query_basic() {
+    let name = &"Jake";
+    let age = 21;
 
-    let query = Query {
-        name: &name,
-        word: &name,
-    };
+    let query = AgeQuery { age, name };
+
+    let params = query.params();
+    let expected_params: &[&dyn ToSql] = &[&age, &name];
+
+    assert_eq!(format!("{:?}", params), format!("{:?}", expected_params));
 
     assert_eq!(
-        Query::SQL, 
-        "SELECT id FROM users WHERE name = $1",
+        query.sql(),
+        "SELECT * FROM users WHERE age > $1 AND name > $2",
     );
 }

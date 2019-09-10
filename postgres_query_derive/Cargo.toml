@@ -1,0 +1,17 @@
+[package]
+name = "postgres_query_derive"
+version = "0.1.0"
+authors = ["Christofer Nolander <christofer.nolander@gmail.com>"]
+edition = "2018"
+
+[lib]
+name = "postgres_query_derive"
+proc-macro = true
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+proc-macro2 = "1.0.3"
+syn = { version = "1.0.5", features = ["derive", "extra-traits"] }
+quote = "1.0.2"
+postgres = "0.15.2"

@@ -1,20 +1,15 @@
 [package]
-name = "rust-postgres-query"
+name = "postgres_query"
 version = "0.1.0"
 authors = ["Christofer Nolander <christofer.nolander@gmail.com>"]
 edition = "2018"
 
 [lib]
 name = "postgres_query"
-proc-macro = true
 
 [[example]]
 name = "basic_select"
 
-# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
-
 [dependencies]
-proc-macro2 = "1.0.3"
-syn = "1.0.5"
-quote = "1.0.2"
 postgres = "0.15.2"
+postgres_query_derive = { path = "postgres_query_derive" }
