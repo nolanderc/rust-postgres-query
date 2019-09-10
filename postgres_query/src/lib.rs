@@ -4,6 +4,7 @@ use postgres::rows::Rows;
 use postgres::types::ToSql;
 use postgres::GenericConnection;
 
+/// A type which can execute an SQL query.
 pub trait Query<'a> {
     type Sql: AsRef<str>;
     type Params: AsRef<[&'a dyn ToSql]>;
