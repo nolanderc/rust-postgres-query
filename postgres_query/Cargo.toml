@@ -1,6 +1,6 @@
 [package]
 name = "postgres_query"
-version = "0.1.0"
+version = "0.1.1"
 authors = ["Christofer Nolander <christofer.nolander@gmail.com>"]
 description = "Define SQL queries with human-readable parameter names"
 edition = "2018"
@@ -16,4 +16,4 @@ name = "basic_select"
 
 [dependencies]
 postgres = "0.15.2"
-postgres_query_derive = { version = "0.1.0", path = "../postgres_query_derive" }
+postgres_query_derive = { version = "0.1.1", path = "../postgres_query_derive" }
