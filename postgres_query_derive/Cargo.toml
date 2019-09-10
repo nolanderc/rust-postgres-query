@@ -6,6 +6,7 @@ edition = "2018"
 description = "Define SQL queries with human-readable parameter names"
 repository = "https://github.com/nolanderc/rust-postgres-query"
 license = "MIT OR Apache-2.0"
+readme = "../README.md"
 
 [lib]
 name = "postgres_query_derive"
