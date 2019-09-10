@@ -2,7 +2,10 @@
 name = "postgres_query"
 version = "0.1.0"
 authors = ["Christofer Nolander <christofer.nolander@gmail.com>"]
+description = "Define SQL queries with human-readable parameter names"
 edition = "2018"
+repository = "https://github.com/nolanderc/rust-postgres-query"
+license = "MIT OR Apache-2.0"
 
 [lib]
 name = "postgres_query"
