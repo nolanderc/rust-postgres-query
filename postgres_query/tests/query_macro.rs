@@ -7,7 +7,7 @@ fn text_only() {
     let query = query!("SELECT id, name FROM people");
 
     assert_eq!(query.sql, "SELECT id, name FROM people");
-    assert_params_eq(query.parameters.to_vec(), vec![])
+    assert_params_eq(query.parameters, vec![])
 }
 
 #[test]
@@ -15,7 +15,7 @@ fn escape_dollar() {
     let query = query!("SELECT $$");
 
     assert_eq!(query.sql, "SELECT $");
-    assert_params_eq(query.parameters.to_vec(), vec![])
+    assert_params_eq(query.parameters, vec![])
 }
 
 #[test]
@@ -24,7 +24,7 @@ fn parameter_substitution_implicit_name() {
     let query = query!("SELECT id, name FROM people WHERE age = $age", age);
 
     assert_eq!(query.sql, "SELECT id, name FROM people WHERE age = $1");
-    assert_params_eq(query.parameters.to_vec(), vec![(&age, &Type::INT4)])
+    assert_params_eq(query.parameters, vec![(&age, &Type::INT4)])
 }
 
 #[test]
@@ -32,7 +32,7 @@ fn parameter_substitution_explicit_name() {
     let query = query!("SELECT id, name FROM people WHERE age = $age", age = 42);
 
     assert_eq!(query.sql, "SELECT id, name FROM people WHERE age = $1");
-    assert_params_eq(query.parameters.to_vec(), vec![(&42, &Type::INT4)])
+    assert_params_eq(query.parameters, vec![(&42, &Type::INT4)])
 }
 
 #[test]
@@ -41,7 +41,7 @@ fn parameter_substitution_multiple_parameters() {
 
     assert_eq!(query.sql, "$1 $2 $3");
     assert_params_eq(
-        query.parameters.to_vec(),
+        query.parameters,
         vec![
             (&42, &Type::INT4),
             (&"John Wick", &Type::TEXT),
