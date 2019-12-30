@@ -79,7 +79,9 @@ async fn execute() {
     .await
     .unwrap();
 
-    let person = list_people().execute(&client).await.unwrap();
+    let person: Vec<Person> = list_people().fetch(&client).await.unwrap();
+    assert_eq!(person[0].age, 42);
+    assert_eq!(person[0].name, "John Wick");
 }
 
 fn assert_params_eq<'a>(a: Vec<&'a dyn ToSql>, b: Vec<(&'a dyn ToSql, &'a Type)>) {

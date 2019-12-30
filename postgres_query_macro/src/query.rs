@@ -50,7 +50,7 @@ impl QueryInput {
                 quote! {
                     postgres_query::Query {
                         sql: #sql,
-                        parameters: Box::new([#parameters]),
+                        parameters: vec![#parameters],
                     }
                 }
             }

@@ -15,6 +15,5 @@ pub use postgres_query_macro::query;
 #[derive(Debug, Clone)]
 pub struct Query<'a> {
     pub sql: &'static str,
-    pub parameters: Box<[&'a dyn ToSql]>,
+    pub parameters: Vec<&'a dyn ToSql>,
 }
-
