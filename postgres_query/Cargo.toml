@@ -1,6 +1,6 @@
 [package]
 name = "postgres_query"
-version = "0.1.1"
+version = "0.2.0"
 authors = ["Christofer Nolander <christofer.nolander@gmail.com>"]
 description = "Define SQL queries with human-readable parameter names"
 edition = "2018"
@@ -12,7 +12,7 @@ readme = "../README.md"
 name = "postgres_query"
 
 [dependencies]
-postgres_query_macro = { version = "0.1.0", path = "../postgres_query_macro" }
+postgres_query_macro = { version = "0.2.0", path = "../postgres_query_macro" }
 proc-macro-hack = "0.5.11"
 postgres-types = "0.1.0"
 serde = "1.0.104"
