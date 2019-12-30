@@ -1,0 +1,16 @@
+[package]
+name = "postgres_query_macro"
+version = "0.1.0"
+authors = ["Christofer Nolander <christofer.nolander@gmail.com>"]
+edition = "2018"
+
+[lib]
+proc-macro = true
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+proc-macro-hack = "0.5.11"
+quote = "1.0.2"
+syn = { version = "1.0.11", features = ["full"] }
+proc-macro2 = "1.0.6"

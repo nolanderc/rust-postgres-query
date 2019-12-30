@@ -11,9 +11,15 @@ readme = "../README.md"
 [lib]
 name = "postgres_query"
 
-[[example]]
-name = "basic_select"
-
 [dependencies]
-postgres = "0.15.2"
-postgres_query_derive = { version = "0.1.1", path = "../postgres_query_derive" }
+postgres_query_macro = { version = "0.1.0", path = "../postgres_query_macro" }
+proc-macro-hack = "0.5.11"
+postgres-types = "0.1.0"
+serde = "1.0.104"
+tokio-postgres = "0.5.1"
+futures = "0.3.1"
+async-trait = "0.1.22"
+
+[dev-dependencies]
+bytes = "0.5.3"
+tokio = {version = "0.2.6", features = ["macros"] }
