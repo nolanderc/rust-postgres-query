@@ -18,13 +18,3 @@ pub struct Query<'a> {
     pub parameters: Box<[&'a dyn ToSql]>,
 }
 
-#[cfg(test)]
-fn test() {
-    let query = query!(
-        "$a $b $c",
-        a = 42,
-        b = "John Wick",
-        c = Option::<i32>::None,
-    );
-}
-
