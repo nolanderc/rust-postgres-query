@@ -47,7 +47,7 @@ pub fn derive(input: DeriveInput) -> TokenStream {
 
     quote! {
         impl #lib::FromSqlRow for #ident {
-            fn from_row(row: #postgres::Row) -> Result<Self, #lib::Error> {
+            fn from_row(row: &#postgres::Row) -> Result<Self, #lib::extract::Error> {
                 #getters
                 Ok(#constructor)
             }

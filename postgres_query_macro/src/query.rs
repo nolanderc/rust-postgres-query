@@ -142,7 +142,7 @@ fn expr_to_argument(expr: Expr) -> syn::Result<(Ident, Expr)> {
 
         _ => Err(syn::Error::new(
             expr.span(),
-            "unexpected expression, expected either `foo` or `foo = bar`",
+            "unexpected expression, expected either `<ident>` or `<ident> = <expr>`",
         )),
     }
 }
