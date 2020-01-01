@@ -3,11 +3,13 @@ name = "postgres_query_macro"
 version = "0.2.0"
 authors = ["Christofer Nolander <christofer.nolander@gmail.com>"]
 edition = "2018"
+description = "Define SQL queries with human-readable parameter names"
+repository = "https://github.com/nolanderc/rust-postgres-query"
+license = "MIT OR Apache-2.0"
+readme = "../README.md"
 
 [lib]
 proc-macro = true
-
-# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
 proc-macro-hack = "0.5.11"
