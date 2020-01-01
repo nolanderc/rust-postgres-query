@@ -1,6 +1,6 @@
 [workspace]
 members = [
     "postgres_query",
-    "postgres_query_derive",
+    "postgres_query_macro",
 ]
 
