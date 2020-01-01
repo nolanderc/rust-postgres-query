@@ -16,7 +16,7 @@ name = "basic"
 path = "examples/basic.rs"
 
 [dependencies]
-postgres_query_macro = "0.2.0"
+postgres_query_macro = { version = "0.2.0", path = "../postgres_query_macro" }
 proc-macro-hack = "0.5.11"
 postgres-types = "0.1.0"
 serde = "1.0.104"
