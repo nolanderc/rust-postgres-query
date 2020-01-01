@@ -1,66 +1,34 @@
 
-# Rust Postgres Query
+# postgres-query
 
-This crate provides a trait and a macro which enables the use of named
-parameters in SQL queries when using
-[rust-postgres](https://github.com/sfackler/rust-postgres).  
-
+This crate provides convenience macros and traits which help with writing SQL
+queries and gathering their results into statically typed structures.
 
 ## Example
 
 ```rust
-use postgres_query::Query;
-use postgres::{Connection, TlsMode, types::ToSql};
+// Connect to the database
+let client: Client = connect(/* ... */);
 
-#[derive(Query)]
-#[query(sql = "
-    CREATE TABLE IF NOT EXISTS person (
-         id              SERIAL PRIMARY KEY,
-         name            VARCHAR NOT NULL,
-         age             INTEGER
-     )
-")]
-struct CreatePerson;
+// Construct the query
+let query = query!(
+    "SELECT name, age FROM people WHERE age >= $min_age",
+    min_age = 18
+);
 
-#[derive(Query)]
-#[query(sql = "INSERT INTO person (name, age) VALUES ($name, $age)")]
-struct InsertPerson<'a> {
-    name: &'a str,
-    age: Option<i32>,
+// Define the structure of the data returned from the query
+#[derive(FromSqlRow)]
+struct Person {
+    age: i32,
+    name: String,
 }
 
-#[derive(Query)]
-#[query(sql = "SELECT id, name, age FROM person WHERE name = $first_name || ' ' || $last_name")]
-struct NameQuery<'a> {
-    first_name: &'a dyn ToSql,
-    last_name: &'a str,
-}
+// Execute the query
+let people: Vec<Person> = query.fetch(&client).await?;
 
-fn main() {
-    let conn = Connection::connect("postgres://postgres@localhost:5432", TlsMode::None).unwrap();
-
-    let create = CreatePerson;
-    create.execute(&conn).unwrap();
-
-    let insert = InsertPerson {
-        name: "Cave Johnson",
-        age: Some(23),
-    };
-
-    insert.execute(&conn).unwrap();
-
-    let name = NameQuery {
-        first_name: &"Cave",
-        last_name: "Johnson"
-    };
-
-    for row in &name.query(&conn).unwrap() {
-        let id: i32 = row.get("id");
-        let name: String = row.get("name");
-        let age: i32 = row.get("age");
-
-        println!("Found person {}: {} age {}", id, name, age);
-    }
+// Use the results
+for person in people {
+    println!("{} is {} years young", person.name, person.age);
 }
 ```
 

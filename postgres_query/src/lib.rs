@@ -27,6 +27,10 @@
 //!
 //! // Execute the query
 //! let people: Vec<Person> = query.fetch(&client).await?;
+//!
+//! for person in people {
+//!     println!("{} is {} years young", person.name, person.age);
+//! }
 //! # Ok(())
 //! # }
 //! ```
