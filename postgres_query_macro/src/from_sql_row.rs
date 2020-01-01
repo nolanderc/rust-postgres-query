@@ -7,7 +7,6 @@ use syn::{
 
 pub fn derive(input: DeriveInput) -> TokenStream {
     let lib = quote! { postgres_query };
-    let postgres = quote! { tokio_postgres };
 
     let ident = &input.ident;
 
@@ -47,7 +46,10 @@ pub fn derive(input: DeriveInput) -> TokenStream {
 
     quote! {
         impl #lib::FromSqlRow for #ident {
-            fn from_row(row: &#postgres::Row) -> Result<Self, #lib::extract::Error> {
+            fn from_row<R>(row: &R) -> Result<Self, #lib::extract::Error>
+            where 
+                R: #lib::extract::Row 
+            {
                 #getters
                 Ok(#constructor)
             }

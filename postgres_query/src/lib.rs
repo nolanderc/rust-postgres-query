@@ -99,6 +99,9 @@ mod error;
 use postgres_types::ToSql;
 use proc_macro_hack::proc_macro_hack;
 
+pub use error::{Error, Result};
+pub use extract::FromSqlRow;
+
 /// Extract values from a row.
 ///
 /// - If used on a tuple struct, values will be extracted from the corresponding columns based on
@@ -120,10 +123,6 @@ use proc_macro_hack::proc_macro_hack;
 /// };
 /// ```
 pub use postgres_query_macro::FromSqlRow;
-
-pub use extract::FromSqlRow;
-
-pub use error::{Error, Result};
 
 /// Constructs a new query.
 ///
