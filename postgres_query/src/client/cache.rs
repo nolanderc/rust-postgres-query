@@ -15,16 +15,13 @@ use tokio_postgres::{error::Error as SqlError, RowStream, Statement};
 /// A wrapper which caches statements prepared through the [`GenericClient::prepare_static`] method.
 ///
 /// [`GenericClient::prepare_static`]: trait.GenericClient#method.prepare_static
-pub struct Cached<C>
+pub struct Caching<C>
 where
     C: GenericClient,
 {
     client: C,
     cache: Cache,
 }
-
-#[derive(Clone)]
-pub struct QueryCache(Cache);
 
 type Cache = Arc<Mutex<DynamicCache<StrKey, Statement>>>;
 
@@ -54,29 +51,29 @@ trait DynamicKey: Hash + Eq {
     const LINEAR_CUTOFF: usize;
 }
 
-impl<C> Cached<C>
+impl<C> Caching<C>
 where
     C: GenericClient,
 {
     /// Wrap a client in a new cache.
-    pub fn new(client: C) -> Cached<C> {
-        Cached {
+    pub fn new(client: C) -> Caching<C> {
+        Caching {
             client,
             cache: Cache::default(),
         }
     }
 }
 
-impl<C> From<C> for Cached<C>
+impl<C> From<C> for Caching<C>
 where
     C: GenericClient,
 {
     fn from(client: C) -> Self {
-        Cached::new(client)
+        Caching::new(client)
     }
 }
 
-impl<C> Deref for Cached<C>
+impl<C> Deref for Caching<C>
 where
     C: GenericClient,
 {
@@ -87,7 +84,7 @@ where
     }
 }
 
-impl<C> DerefMut for Cached<C>
+impl<C> DerefMut for Caching<C>
 where
     C: GenericClient,
 {
@@ -97,7 +94,7 @@ where
 }
 
 #[async_trait]
-impl<C> GenericClient for Cached<C>
+impl<C> GenericClient for Caching<C>
 where
     C: GenericClient + Sync + Send,
 {
@@ -132,7 +129,7 @@ where
     }
 }
 
-impl<C> Cached<C>
+impl<C> Caching<C>
 where
     C: GenericClient,
 {
@@ -206,12 +203,12 @@ where
 // dynamic dispatch. When GATs become stable we can move this into the `GenericClient` trait.
 macro_rules! impl_cached_transaction {
     ($client:ty, $transaction:ty) => {
-        impl Cached<$client> {
+        impl Caching<$client> {
             /// Start a new transaction that shares the same cache as the current client.
-            pub async fn transaction(&mut self) -> Result<Cached<$transaction>, Error> {
+            pub async fn transaction(&mut self) -> Result<Caching<$transaction>, Error> {
                 <$client>::transaction(self)
                     .await
-                    .map(Cached::new)
+                    .map(Caching::new)
                     .map_err(Error::BeginTransaction)
             }
         }

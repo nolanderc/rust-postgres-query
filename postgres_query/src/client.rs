@@ -2,7 +2,7 @@
 
 mod cache;
 
-pub use cache::Cached;
+pub use cache::Caching;
 
 use async_trait::async_trait;
 use postgres_types::ToSql;
