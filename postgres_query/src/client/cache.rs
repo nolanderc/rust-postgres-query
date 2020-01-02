@@ -12,9 +12,10 @@ use std::ops::{Deref, DerefMut};
 use std::sync::Arc;
 use tokio_postgres::{error::Error as SqlError, RowStream, Statement};
 
-/// A wrapper which caches statements prepared through the [`GenericClient::prepare_static`] method.
+/// A client wrapper which caches prepared queries.
 ///
-/// [`GenericClient::prepare_static`]: trait.GenericClient#method.prepare_static
+/// Only queries prepared through the `GenericClient::prepare_static` trait method are actually
+/// cached.
 #[derive(Clone)]
 pub struct Caching<C>
 where
