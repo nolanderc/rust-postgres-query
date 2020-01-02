@@ -170,7 +170,7 @@ pub use postgres_query_macro::query;
 ///
 /// When executing the query you have two options, either:
 ///
-/// 1. use the provided methods: `execute`, `fetch`, `query`, ... (preferred)
+/// 1. use the provided methods: `execute`, `fetch`, `query`, etc.
 /// 2. use the `sql` and `parameters` fields as arguments to the standard [`Client`] methods
 ///
 /// ```

@@ -1,5 +1,9 @@
 //! Abstractions over client-like types.
 
+mod cache;
+
+pub use cache::Cached;
+
 use async_trait::async_trait;
 use postgres_types::ToSql;
 use tokio_postgres::{error::Error as SqlError, Client, RowStream, Statement, Transaction};
