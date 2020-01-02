@@ -50,32 +50,6 @@ fn parameter_substitution_multiple_parameters() {
     )
 }
 
-// This only exists to make sure that all client related code type-checks and works as intended.
-#[tokio::test]
-async fn execute() {
-    let (client, _connection) = match tokio_postgres::connect("", tokio_postgres::NoTls).await {
-        Ok(conn) => conn,
-        _ => return,
-    };
-
-    #[derive(FromSqlRow)]
-    struct Person {
-        age: i32,
-        name: String,
-    }
-
-    let query = query!(
-        "SELECT age, name FROM people WHERE age = $age AND name = $name",
-        age = 42i32,
-        name = "John Wick",
-    );
-
-    let person: Person = query.fetch_one(&client).await.unwrap();
-
-    assert_eq!(person.age, 42);
-    assert_eq!(person.name, "John Wick");
-}
-
 fn assert_params_eq<'a>(a: Vec<&'a (dyn ToSql + Sync)>, b: Vec<(&'a dyn ToSql, &'a Type)>) {
     assert_eq!(a.len(), b.len());
     for (a, (b, ty)) in a.into_iter().zip(b) {
