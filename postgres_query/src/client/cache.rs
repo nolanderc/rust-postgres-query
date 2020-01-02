@@ -15,6 +15,7 @@ use tokio_postgres::{error::Error as SqlError, RowStream, Statement};
 /// A wrapper which caches statements prepared through the [`GenericClient::prepare_static`] method.
 ///
 /// [`GenericClient::prepare_static`]: trait.GenericClient#method.prepare_static
+#[derive(Clone)]
 pub struct Caching<C>
 where
     C: GenericClient,
@@ -61,6 +62,11 @@ where
             client,
             cache: Cache::default(),
         }
+    }
+
+    /// Return the inner client.
+    pub fn into_inner(self) -> C {
+        self.client
     }
 }
 

@@ -89,10 +89,42 @@
 //! };
 //! ```
 //!
+//! # Caching queries
+//!
+//! From time to time you probably want to execute the same query multiple times, but with different
+//! parameters. In times like these we can decrease the load on the database by preparing our
+//! queries before executing them. By wrapping a client in a [`Caching`] struct this behaviour is
+//! automatically provided for all queries that originate from this crate:
+//!
+//! ```rust
+//! # use tokio_postgres::Client;
+//! # use postgres_query::{query, Result, Caching};
+//! # fn connect() -> Client { unimplemented!() }
+//! # async fn foo() -> Result<()> {
+//! // Connect to the database
+//! let client: Client = connect(/* ... */);
+//!
+//! // Wrap the client in a query cache
+//! let cached_client = Caching::new(client);
+//!
+//! for age in 0..100i32 {
+//!     let query = query!("SELECT name, weight FROM people WHERE age = $age", age);
+//!
+//!     // The query is prepared and cached the first time it's executed.
+//!     // All subsequent fetches will use the cached Statement.
+//!     let people: Vec<(String, i32)> = query.fetch(&cached_client).await?;
+//!     
+//!     /* Do something with people */
+//! }
+//! # Ok(())
+//! # }
+//! ```
+//!
 //! [`Query`]: struct.Query.html
 //! [`query!`]: macro.Query.html
 //! [`FromSqlRow`]: extract/trait.FromSqlRow.html
 //! [`derive(FromSqlRow)`]: derive.FromSqlRow.html
+//! [`Caching`]: client/struct.Caching.html
 
 pub mod client;
 pub mod execute;
@@ -103,6 +135,7 @@ mod error;
 use postgres_types::ToSql;
 use proc_macro_hack::proc_macro_hack;
 
+pub use client::Caching;
 pub use error::{Error, Result};
 pub use extract::FromSqlRow;
 
