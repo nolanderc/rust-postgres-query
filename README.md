@@ -3,6 +3,8 @@
 
 [![Crates.io](https://img.shields.io/crates/v/postgres_query)](https://crates.io/crates/postgres-query)
 [![Documentation](https://docs.rs/postgres_query/badge.svg)](https://docs.rs/postgres_query)
+[![Minimum Rust Version](https://img.shields.io/badge/rustc-1.39%2B-orange)](https://www.rust-lang.org/)
+[![License](https://img.shields.io/crates/l/postgres_query)](#license)
 
 This crate provides convenience macros and traits which help with writing SQL
 queries and gathering their results into statically typed structures.
