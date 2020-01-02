@@ -1,8 +1,8 @@
 
 # postgres-query
 
-![Crates.io](https://img.shields.io/crates/v/postgres_query)
-![Documentation](https://docs.rs/postgres_query/badge.svg)
+[![Crates.io](https://img.shields.io/crates/v/postgres_query)](https://crates.io/crates/postgres-query)
+[![Documentation](https://docs.rs/postgres_query/badge.svg)](https://docs.rs/postgres_query)
 
 This crate provides convenience macros and traits which help with writing SQL
 queries and gathering their results into statically typed structures.
