@@ -192,8 +192,19 @@ pub use postgres_query_macro::FromSqlRow;
 ///     parameters: vec![&age, &"John Wick"],
 /// };
 /// ```
+#[macro_export]
+macro_rules! query {
+    ($sql:literal) => {
+        $crate::__query!($sql)
+    };
+    ($sql:literal, $($arg:expr),* $(,)?) => {
+        $crate::__query!($sql, $($arg),*)
+    };
+}
+
 #[proc_macro_hack]
-pub use postgres_query_macro::query;
+#[doc(hidden)]
+pub use postgres_query_macro::query as __query;
 
 /// A static query with dynamic parameters.
 ///
