@@ -103,3 +103,82 @@ async fn cached_transaction() -> Result {
 
     Ok(())
 }
+
+#[tokio::test]
+async fn fetch_joined_relations() -> Result {
+    let mut client = establish().await?;
+    let tx = client.transaction().await?;
+
+    query!(
+        "CREATE TABLE orders (
+            id SERIAL PRIMARY KEY,
+            customer TEXT
+        )"
+    )
+    .execute(&tx)
+    .await?;
+
+    query!(
+        "CREATE TABLE order_items (
+            order_id INTEGER REFERENCES orders(id),
+            item TEXT NOT NULL
+        )"
+    )
+    .execute(&tx)
+    .await?;
+
+    #[derive(FromSqlRow)]
+    struct OrderId(i32);
+
+    let orders = query!(
+        "INSERT INTO orders (customer) 
+        VALUES 
+            ('Emma'), 
+            ('Anna')
+        RETURNING id",
+    )
+    .fetch::<OrderId, _>(&tx)
+    .await?;
+
+    query!(
+        "INSERT INTO order_items (order_id, item)
+        VALUES 
+            ($emma, 'Hair dryer'), 
+            ($emma, 'Phone'), 
+            ($anna, 'Note book')",
+        emma = orders[0].0,
+        anna = orders[1].0,
+    )
+    .execute(&tx)
+    .await?;
+
+    #[derive(Debug, PartialEq, FromSqlRow)]
+    struct Order {
+        customer: String,
+        item: String,
+    }
+
+    let orders = query!(
+        "SELECT 
+            customer, 
+            item
+        FROM order_items
+        INNER JOIN orders ON order_items.order_id = orders.id
+        ORDER BY customer, item"
+    )
+    .fetch::<Order, _>(&tx)
+    .await?;
+
+    assert_eq!(orders.len(), 3);
+
+    assert_eq!(orders[0].customer, "Anna");
+    assert_eq!(orders[0].item, "Note book");
+
+    assert_eq!(orders[1].customer, "Emma");
+    assert_eq!(orders[1].item, "Hair dryer");
+
+    assert_eq!(orders[2].customer, "Emma");
+    assert_eq!(orders[2].item, "Phone");
+
+    Ok(())
+}
