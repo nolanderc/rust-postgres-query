@@ -3,7 +3,7 @@
 
 [![Crates.io](https://img.shields.io/crates/v/postgres_query)](https://crates.io/crates/postgres-query)
 [![License](https://img.shields.io/crates/l/postgres_query)](#license)
-[![Minimum Rust Version](https://img.shields.io/badge/rustc-1.39%2B-orange)](https://www.rust-lang.org/)
+[![Minimum Rust Version](https://img.shields.io/badge/rustc-1.40%2B-orange)](https://www.rust-lang.org/)
 [![Documentation](https://docs.rs/postgres_query/badge.svg)](https://docs.rs/postgres_query)
 
 This crate provides convenience macros and traits which help with writing SQL
