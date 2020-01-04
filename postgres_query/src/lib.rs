@@ -159,6 +159,67 @@ pub use extract::FromSqlRow;
 ///     name: String,
 /// };
 /// ```
+///
+/// # Attributes
+///
+/// Data extraction can be customized by using the `row` attribute.
+///
+///
+/// ## Container attributes
+///
+/// These attributes are put on the struct itself.
+///
+///
+/// ### `#[row(order)]`
+/// 
+/// On structs with named fields: uses the order of the fields instead of their names. This
+/// overrides the default behaviour. 
+///
+///
+/// ## Field attributes
+///
+/// These attributes are put on the fields of the struct.
+///
+///
+/// ### `#[row(rename = "...")]`
+/// 
+/// Use a name other than that of the field when looking up the name of the column.
+/// 
+///
+/// ### `#[row(flatten)]`
+/// 
+/// Flatten the contents of this field into its container by recursively calling `FromSqlRow` on the
+/// field's type. This removes one level of nesting:
+///
+/// ```
+/// # use postgres_query::{FromSqlRow, query, Result};
+/// # use tokio_postgres::Client;
+/// # async fn foo() -> Result<()> {
+/// # let client: Client = unimplemented!();
+/// #[derive(FromSqlRow)]
+/// struct Person {
+///     name: String,
+///     age: i32
+/// }
+///
+/// #[derive(FromSqlRow)]
+/// struct Customer {
+///     id: i32,
+///     #[row(flatten)]
+///     info: Person,
+/// }
+///
+/// let customer: Customer = query!("SELECT 14 as id, 'Bob' as name, 47 as age")
+///     .fetch_one(&client)
+///     .await?;
+///
+/// assert_eq!(customer.id, 14);
+/// assert_eq!(customer.info.name, "Bob");
+/// assert_eq!(customer.info.age, 47);
+/// # Ok(())
+/// # }
+/// ```
+///
 pub use postgres_query_macro::FromSqlRow;
 
 /// Constructs a new query.

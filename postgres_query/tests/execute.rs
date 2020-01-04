@@ -247,3 +247,64 @@ async fn fetch_joined_relations() -> Result {
 
     Ok(())
 }
+
+#[tokio::test]
+async fn multi_mapping() -> Result {
+    let mut client = establish().await?;
+    let tx = client.transaction().await?;
+
+    #[derive(Debug, FromSqlRow)]
+    struct Person {
+        id: i32,
+        name: String,
+    }
+
+    #[derive(Debug, FromSqlRow)]
+    struct Family {
+        #[row(flatten)]
+        parent: Person,
+        #[row(split = "id")]
+        #[row(flatten)]
+        child: Person,
+    }
+
+    let family = query!("SELECT 1 as id, 'Bob' as name, 2 as id, 'Ike' as name")
+        .fetch_one::<Family, _>(&tx)
+        .await?;
+
+    assert_eq!(family.parent.id, 1);
+    assert_eq!(family.parent.name, "Bob");
+
+    assert_eq!(family.child.id, 2);
+    assert_eq!(family.child.name, "Ike");
+
+    Ok(())
+}
+
+#[tokio::test]
+async fn parameter_list() -> Result {
+    let mut client = establish().await?;
+    let tx = client.transaction().await?;
+
+    #[derive(FromSqlRow)]
+    struct Id(i32);
+
+    let filter: &[i32] = &[1, 3];
+
+    let query = query!(
+        "select * from (
+            select 1 as id 
+            union all select 2 
+            union all select 3
+        ) as X where id = any($ids)",
+        ids = filter,
+    );
+
+    let ids: Vec<Id> = query.fetch(&tx).await?;
+
+    assert_eq!(ids.len(), 2);
+    assert_eq!(ids[0].0, 1);
+    assert_eq!(ids[1].0, 3);
+
+    Ok(())
+}

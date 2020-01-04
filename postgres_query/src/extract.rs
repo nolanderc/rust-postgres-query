@@ -2,6 +2,7 @@
 
 use postgres_types::FromSql;
 use std::fmt::Display;
+use std::ops::Range;
 use thiserror::Error;
 use tokio_postgres::{error::Error as SqlError, row::RowIndex, Column};
 
@@ -13,6 +14,9 @@ pub enum Error {
 
     #[error("invalid number of columns, found {found} but expected {expected}")]
     ColumnCount { found: usize, expected: usize },
+
+    #[error("column not found in row: {index}")]
+    SliceIndex { index: String },
 
     /// An error occured within postgres itself.
     #[error("internal postgres error")]
@@ -31,8 +35,16 @@ impl Error {
     }
 }
 
+mod private {
+    pub mod row {
+        pub trait Sealed {}
+    }
+}
+
 /// Anything that provides a row-like interface.
-pub trait Row {
+///
+/// This trait is sealed and cannot be implemented for types outside of this crate.
+pub trait Row: private::row::Sealed {
     /// Return the name and type of each column.
     fn columns(&self) -> &[Column];
 
@@ -67,6 +79,39 @@ pub trait Row {
             Err(err) => panic!("failed to retrieve column: {}", err),
         }
     }
+
+    /// Split this row into two slices.
+    ///
+    /// If the split was successful, ie. returned `Some(left, right)`, `left` contains all columns
+    /// in the range `0..index` and `right` columns `index..self.len()`.  Returns `None` if the
+    /// index did not exist or was out of bounds.
+    fn split<'a, I>(&'a self, index: I) -> Option<(RowSlice<'a, Self>, RowSlice<'a, Self>)>
+    where
+        I: RowIndex + Display,
+        Self: Sized,
+    {
+        let index = index.__idx(self.columns())?;
+
+        let before = RowSlice {
+            row: self,
+            range: 0..index,
+        };
+
+        let after = RowSlice {
+            row: self,
+            range: index..self.len(),
+        };
+
+        Some((before, after))
+    }
+}
+
+pub struct RowSlice<'a, R>
+where
+    R: Row,
+{
+    row: &'a R,
+    range: Range<usize>,
 }
 
 /// Extract values from a row.
@@ -106,6 +151,8 @@ pub trait FromSqlRow: Sized {
     }
 }
 
+impl private::row::Sealed for tokio_postgres::Row {}
+
 impl Row for tokio_postgres::Row {
     fn columns(&self) -> &[Column] {
         tokio_postgres::Row::columns(self)
@@ -131,6 +178,30 @@ impl Row for tokio_postgres::Row {
         T: FromSql<'a>,
     {
         tokio_postgres::Row::get(self, index)
+    }
+}
+
+impl<R> private::row::Sealed for RowSlice<'_, R> where R: Row {}
+
+impl<R> Row for RowSlice<'_, R>
+where
+    R: Row,
+{
+    fn columns(&self) -> &[Column] {
+        &self.row.columns()[self.range.clone()]
+    }
+    fn try_get<'a, I, T>(&'a self, index: I) -> Result<T, Error>
+    where
+        I: RowIndex + Display,
+        T: FromSql<'a>,
+    {
+        if let Some(index) = index.__idx(self.columns()) {
+            self.row.try_get(self.range.start + index)
+        } else {
+            Err(Error::SliceIndex {
+                index: index.to_string(),
+            })
+        }
     }
 }
 
@@ -186,3 +257,4 @@ impl_from_row_for_tuple!((A, B, C, D, E));
 impl_from_row_for_tuple!((A, B, C, D, E, F));
 impl_from_row_for_tuple!((A, B, C, D, E, F, G));
 impl_from_row_for_tuple!((A, B, C, D, E, F, G, H));
+
