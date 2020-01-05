@@ -1,5 +1,8 @@
 extern crate proc_macro;
 
+#[macro_use]
+mod macros;
+
 mod query;
 mod from_sql_row;
 
