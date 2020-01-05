@@ -410,6 +410,90 @@ async fn multi_mapping_mixed() -> Result {
 }
 
 #[tokio::test]
+async fn multi_mapping_explicit_split() -> Result {
+    let mut client = establish().await?;
+    let tx = client.transaction().await?;
+
+    #[derive(Debug, FromSqlRow)]
+    #[row(partition(split))]
+    struct Family {
+        generation: i32,
+        #[row(split = "id")]
+        id: i32,
+        #[row(split = "id")]
+        #[row(split = "name")]
+        name: String,
+        #[row(split = "age")]
+        age: i32,
+    }
+
+    let family = query!(
+        // Each line represents a partition
+        "SELECT 
+            8 as generation, 
+            0 as id, 'John' as name, 61 as age, 
+            1 as id, 
+            'Bob' as name, 
+            32 as age, 2 as id, 'Ike' as name, 7 as age"
+    )
+    .fetch_one::<Family, _>(&tx)
+    .await?;
+
+    assert_eq!(family.generation, 8);
+    assert_eq!(family.id, 0);
+    assert_eq!(family.name, "Bob");
+    assert_eq!(family.age, 32);
+
+    Ok(())
+}
+
+#[tokio::test]
+async fn multi_mapping_mixed_explicit_split() -> Result {
+    let mut client = establish().await?;
+    let tx = client.transaction().await?;
+
+    #[derive(Debug, FromSqlRow)]
+    struct Person {
+        id: i32,
+        name: String,
+    }
+
+    #[derive(Debug, FromSqlRow)]
+    #[row(partition(split = "id"))]
+    struct Family {
+        generation: i32,
+        #[row(flatten)]
+        grandparent: Person,
+        #[row(split = "id")]
+        age: i32,
+        #[row(flatten)]
+        child: Person,
+    }
+
+    let family = query!(
+        "SELECT 
+            8 as generation,
+            0 as id, 'John' as name, 61 as age, 
+            1 as id, 'Bob' as name, 32 as age, 
+            2 as id, 'Ike' as name, 7 as age"
+    )
+    .fetch_one::<Family, _>(&tx)
+    .await?;
+
+    assert_eq!(family.generation, 8);
+
+    assert_eq!(family.grandparent.id, 0);
+    assert_eq!(family.grandparent.name, "John");
+
+    assert_eq!(family.age, 32);
+
+    assert_eq!(family.child.id, 2);
+    assert_eq!(family.child.name, "Ike");
+
+    Ok(())
+}
+
+#[tokio::test]
 async fn parameter_list() -> Result {
     let mut client = establish().await?;
     let tx = client.transaction().await?;
