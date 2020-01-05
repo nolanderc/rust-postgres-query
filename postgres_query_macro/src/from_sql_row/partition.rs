@@ -1,6 +1,7 @@
 use super::{field_initializers, Index, PartitionKind, Property};
 use proc_macro2::{Span, TokenStream};
 use quote::*;
+use std::mem;
 use syn::Ident;
 
 struct ExactPartition {
@@ -8,15 +9,15 @@ struct ExactPartition {
     properties: Vec<Property>,
 }
 
-struct SplitPartition {
-    split: Option<String>,
-    properties: Vec<Property>,
+enum Split {
+    Column(String),
+    Group(Vec<Property>),
 }
 
 pub(super) fn partition_initializers(
     props: Vec<Property>,
     kind: PartitionKind,
-) -> (Vec<TokenStream>, Vec<Ident>) {
+) -> (TokenStream, Vec<Ident>) {
     match kind {
         PartitionKind::Exact => {
             let partitions = exact::partition(props);
@@ -43,7 +44,7 @@ mod exact {
 
         while let Some(prop) = props.next() {
             if standalone(&prop) {
-                let mut properties = Vec::new();
+                let mut properties = vec![prop];
 
                 while let Some(prop) = props.peek() {
                     if standalone(prop) {
@@ -74,33 +75,42 @@ mod exact {
         partitions
     }
 
-    pub(super) fn initializers(partitions: Vec<ExactPartition>) -> (Vec<TokenStream>, Vec<Ident>) {
+    pub(super) fn initializers(partitions: Vec<ExactPartition>) -> (TokenStream, Vec<Ident>) {
         let mut getters = Vec::new();
         let mut locals = Vec::new();
 
-        getters.push(quote! { let mut offset = 0; });
+        getters.push(quote! { let begin = 0; });
+
+        let mut previous_end = Ident::new("begin", Span::call_site());
 
         for (i, partition) in partitions.into_iter().enumerate() {
-            let current = Ident::new(&format!("row_{}", i), Span::call_site());
+            let end = Ident::new(&format!("end_{}", i), Span::call_site());
+            let current = Ident::new(&format!("slice_{}", i), Span::call_site());
             let len = partition.len;
 
             let lib = lib!();
             let advance = quote! {
-                let ref #current = #lib::extract::Row::slice(row, offset..offset+#len)?;
-                offset += #len;
+                let #end = #previous_end + #len;
+                let ref #current = #lib::extract::Row::slice(row, #previous_end..#end)?;
             };
 
-            let (initializer, idents) = field_initializers(partition.properties, &current);
+            previous_end = end;
+
+            let (initializers, idents) = field_initializers(&partition.properties, &current);
 
             locals.extend(idents);
 
             let getter = quote! {
                 #advance
-                #(#initializer)*
+                #initializers
             };
 
             getters.push(getter);
         }
+
+        let getters = quote! {
+            #(#getters)*
+        };
 
         (getters, locals)
     }
@@ -109,83 +119,91 @@ mod exact {
 mod split {
     use super::*;
 
-    pub(super) fn partition(props: Vec<Property>, name: Option<String>) -> Vec<SplitPartition> {
-        let mut partitions = Vec::new();
-        let mut props = props.into_iter().peekable();
+    pub(super) fn partition(props: Vec<Property>, implicit: Option<String>) -> Vec<Split> {
+        let mut splits = Vec::new();
+        let mut group = Vec::new();
 
-        let standalone = |prop: &Property| match prop.index {
-            Index::Position | Index::Name(_) => true,
-            Index::Flatten => false,
+        for prop in props {
+            let mut split_column = |name: String| {
+                if !group.is_empty() {
+                    splits.push(Split::Group(mem::take(&mut group)));
+                }
+                splits.push(Split::Column(name));
+            };
+
+            if let Some(implicit) = implicit.as_ref() {
+                if let Index::Flatten = prop.index {
+                    split_column(implicit.clone());
+                }
+            }
+
+            for name in &prop.attrs.splits {
+                split_column(name.clone());
+            }
+
+            group.push(prop);
+        }
+
+        if !group.is_empty() {
+            splits.push(Split::Group(group))
+        }
+
+        splits
+    }
+
+    pub(super) fn initializers(layout: Vec<Split>) -> (TokenStream, Vec<Ident>) {
+        let mut fragments = Vec::new();
+        let mut locals = Vec::new();
+
+        let splits = layout.iter().filter_map(|kind| match kind {
+            Split::Column(name) => Some(name.as_str()),
+            _ => None,
+        });
+
+        let partition_ident = |i| Ident::new(&format!("partition_{}", i), Span::call_site());
+        let first_partition = partition_ident(0);
+
+        let lib = lib!();
+        let row_trait = quote! { #lib::extract::Row };
+
+        fragments.push(quote! {
+            let columns = #row_trait::columns(row);
+            let splits: &[&'static str] = &[#(#splits),*];
+            let mut splits = #lib::extract::split_columns_many(columns, &splits);
+        });
+
+        let next_partition = quote! {
+            #row_trait::slice(row, splits.next().unwrap()?)?
         };
 
-        while let Some(prop) = props.next() {
-            if standalone(&prop) {
-                let mut properties = Vec::new();
+        fragments.push(quote! {
+            let ref #first_partition = #next_partition;
+        });
 
-                while let Some(prop) = props.peek() {
-                    if standalone(prop) {
-                        properties.push(props.next().unwrap());
-                    } else {
-                        break;
-                    }
+        let mut splits = 0;
+        let mut partition = first_partition;
+
+        for kind in layout.iter() {
+            match kind {
+                Split::Column(_) => {
+                    splits += 1;
+                    partition = partition_ident(splits);
+                    let advance = quote! {
+                        let ref #partition = #next_partition;
+                    };
+                    fragments.push(advance);
                 }
-
-                partitions.push(SplitPartition {
-                    split: None,
-                    properties,
-                });
-            } else {
-                partitions.push(SplitPartition {
-                    split: name.clone(),
-                    properties: vec![prop],
-                });
+                Split::Group(props) => {
+                    let (initializers, idents) = field_initializers(&props, &partition);
+                    fragments.push(initializers);
+                    locals.extend(idents);
+                }
             }
         }
 
-        partitions
-    }
-
-    pub(super) fn initializers(partitions: Vec<SplitPartition>) -> (Vec<TokenStream>, Vec<Ident>) {
-        let mut getters = Vec::new();
-        let mut locals = Vec::new();
-
-        getters.push(quote! {
-            let columns = row.columns();
-            let mut begin = 0;
-        });
-
-        for (i, partition) in partitions.into_iter().enumerate() {
-            let current = Ident::new(&format!("row_{}", i), Span::call_site());
-
-            let name = partition.split;
-
-            let lib = lib!();
-            let row_trait = quote! { #lib::extract::Row };
-
-            let advance = quote! {
-                let cols = &columns[begin..columns.len()];
-                let mut breaks = cols
-                    .iter()
-                    .enumerate()
-                    .filter(|(_, col)| col.name() == #name)
-                    .map(|(i, _)| begin + i);
-                let start = breaks.next().unwrap();
-                let end = breaks.next().unwrap_or_else(|| columns.len());
-                let ref #current = #row_trait::slice(row, start..end)?;
-                begin = end;
-            };
-
-            let (initializer, idents) = field_initializers(partition.properties, &current);
-
-            locals.extend(idents);
-
-            let getter = quote! {
-                #advance
-                #(#initializer)*
-            };
-
-            getters.push(getter);
-        }
+        let getters = quote! {
+            #(#fragments)*
+        };
 
         (getters, locals)
     }

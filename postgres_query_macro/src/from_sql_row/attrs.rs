@@ -7,6 +7,7 @@ pub struct ContainerAttributes {
 pub struct FieldAttributes {
     pub flatten: bool,
     pub rename: Option<String>,
+    pub splits: Vec<String>,
 }
 
 pub enum PartitionKind {
@@ -76,6 +77,7 @@ impl FieldAttributes {
 
         let mut flatten = None;
         let mut rename = None;
+        let mut splits = Vec::new();
 
         for item in items {
             use Meta::{NameValue, Path};
@@ -87,6 +89,11 @@ impl FieldAttributes {
                     set_or_err!(pair, rename, text)?;
                 }
 
+                NameValue(pair) if pair.path.is_ident("split") => {
+                    let text = lit_string(&pair.lit)?;
+                    splits.push(text);
+                }
+
                 item => return Err(err!(item, "unknown attribute")),
             }
         }
@@ -94,6 +101,7 @@ impl FieldAttributes {
         let field = FieldAttributes {
             flatten: flatten.unwrap_or(false),
             rename,
+            splits,
         };
 
         Ok(field)

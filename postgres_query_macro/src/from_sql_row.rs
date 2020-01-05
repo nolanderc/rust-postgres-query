@@ -94,11 +94,11 @@ fn extract_columns(input: &DeriveInput) -> Result<Extractor> {
                 partition_initializers(props, kind)
             } else {
                 let row = Ident::new("row", Span::call_site());
-                field_initializers(props, &row)
+                field_initializers(&props, &row)
             };
 
             Ok(Extractor {
-                getters: getters.into_iter().collect(),
+                getters,
                 locals,
                 columns,
             })
@@ -151,16 +151,16 @@ fn extract_properties(data: &DataStruct) -> Result<Vec<Property>> {
     Ok(props)
 }
 
-fn field_initializers(props: Vec<Property>, row: &Ident) -> (Vec<TokenStream>, Vec<Ident>) {
+fn field_initializers(props: &[Property], row: &Ident) -> (TokenStream, Vec<Ident>) {
     let mut initializers = Vec::new();
     let mut idents = Vec::new();
 
-    for (i, prop) in props.into_iter().enumerate() {
-        let ident = prop.ident;
-        let ty = prop.ty;
+    for (i, prop) in props.iter().enumerate() {
+        let ident = &prop.ident;
+        let ty = &prop.ty;
         let lib = lib!();
 
-        let getter = match prop.index {
+        let getter = match &prop.index {
             Index::Position => quote! {
                 #lib::extract::Row::try_get(#row, #i)?
             },
@@ -176,9 +176,13 @@ fn field_initializers(props: Vec<Property>, row: &Ident) -> (Vec<TokenStream>, V
             let #ident: #ty = #getter;
         };
 
-        idents.push(ident);
+        idents.push(ident.clone());
         initializers.push(initializer);
     }
+
+    let initializers = quote! {
+        #(#initializers)* 
+    };
 
     (initializers, idents)
 }
