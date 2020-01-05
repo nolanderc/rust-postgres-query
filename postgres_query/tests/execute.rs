@@ -93,25 +93,6 @@ async fn fetch_named_struct() -> Result {
 }
 
 #[tokio::test]
-async fn fetch_positional_named_struct() -> Result {
-    let client = establish().await?;
-
-    #[derive(FromSqlRow)]
-    #[row(order)]
-    struct Person {
-        name: String,
-        age: i32,
-    }
-
-    let query = query!("SELECT 'Myke' as something, 31 as something_else");
-    let person: Person = query.fetch_one(&client).await?;
-
-    assert_eq!(person.name, "Myke");
-    assert_eq!(person.age, 31);
-    Ok(())
-}
-
-#[tokio::test]
 async fn fetch_named_struct_rename() -> Result {
     let client = establish().await?;
 
@@ -260,17 +241,164 @@ async fn multi_mapping() -> Result {
     }
 
     #[derive(Debug, FromSqlRow)]
+    #[row(partition(exact))]
     struct Family {
+        generation: i32,
         #[row(flatten)]
         parent: Person,
-        #[row(split = "id")]
         #[row(flatten)]
         child: Person,
     }
 
-    let family = query!("SELECT 1 as id, 'Bob' as name, 2 as id, 'Ike' as name")
-        .fetch_one::<Family, _>(&tx)
-        .await?;
+    let family = query!(
+        "SELECT 
+            7 as generation, 
+            1 as id, 'Bob' as name, 
+            2 as id, 'Ike' as name"
+    )
+    .fetch_one::<Family, _>(&tx)
+    .await?;
+
+    assert_eq!(family.generation, 7);
+
+    assert_eq!(family.parent.id, 1);
+    assert_eq!(family.parent.name, "Bob");
+
+    assert_eq!(family.child.id, 2);
+    assert_eq!(family.child.name, "Ike");
+
+    Ok(())
+}
+
+#[tokio::test]
+async fn multi_mapping_excessive_colunms() -> Result {
+    let mut client = establish().await?;
+    let tx = client.transaction().await?;
+
+    #[derive(Debug, FromSqlRow)]
+    struct Person {
+        id: i32,
+        name: String,
+    }
+
+    #[derive(Debug, FromSqlRow)]
+    #[row(partition(split = "id"))]
+    struct Family {
+        #[row(flatten)]
+        grandparent: Person,
+        #[row(flatten)]
+        parent: Person,
+        #[row(flatten)]
+        child: Person,
+    }
+
+    let family = query!(
+        "SELECT 
+            0 as id, 'John' as name, 61 as age, 
+            1 as id, 'Bob' as name, 32 as age, 
+            2 as id, 'Ike' as name, 7 as age"
+    )
+    .fetch_one::<Family, _>(&tx)
+    .await?;
+
+    assert_eq!(family.grandparent.id, 0);
+    assert_eq!(family.grandparent.name, "John");
+
+    assert_eq!(family.parent.id, 1);
+    assert_eq!(family.parent.name, "Bob");
+
+    assert_eq!(family.child.id, 2);
+    assert_eq!(family.child.name, "Ike");
+
+    Ok(())
+}
+
+#[tokio::test]
+async fn multi_mapping_leading_columns() -> Result {
+    let mut client = establish().await?;
+    let tx = client.transaction().await?;
+
+    #[derive(Debug, FromSqlRow)]
+    struct Person {
+        id: i32,
+        name: String,
+    }
+
+    #[derive(Debug, FromSqlRow)]
+    #[row(partition(split = "id"))]
+    struct Family {
+        generation: i32,
+        #[row(flatten)]
+        grandparent: Person,
+        #[row(flatten)]
+        parent: Person,
+        #[row(flatten)]
+        child: Person,
+    }
+
+    let family = query!(
+        "SELECT 
+            8 as generation,
+            0 as id, 'John' as name, 61 as age, 
+            1 as id, 'Bob' as name, 32 as age, 
+            2 as id, 'Ike' as name, 7 as age"
+    )
+    .fetch_one::<Family, _>(&tx)
+    .await?;
+
+    assert_eq!(family.generation, 8);
+
+    assert_eq!(family.grandparent.id, 0);
+    assert_eq!(family.grandparent.name, "John");
+
+    assert_eq!(family.parent.id, 1);
+    assert_eq!(family.parent.name, "Bob");
+
+    assert_eq!(family.child.id, 2);
+    assert_eq!(family.child.name, "Ike");
+
+    Ok(())
+}
+
+#[tokio::test]
+async fn multi_mapping_mixed() -> Result {
+    let mut client = establish().await?;
+    let tx = client.transaction().await?;
+
+    #[derive(Debug, FromSqlRow)]
+    struct Person {
+        id: i32,
+        name: String,
+    }
+
+    #[derive(Debug, FromSqlRow)]
+    #[row(partition(split = "id"))]
+    struct Family {
+        generation: i32,
+        #[row(flatten)]
+        grandparent: Person,
+        age: i32,
+        #[row(flatten)]
+        parent: Person,
+        #[row(flatten)]
+        child: Person,
+    }
+
+    let family = query!(
+        "SELECT 
+            8 as generation,
+            0 as id, 'John' as name, 61 as age, 
+            1 as id, 'Bob' as name, 32 as age, 
+            2 as id, 'Ike' as name, 7 as age"
+    )
+    .fetch_one::<Family, _>(&tx)
+    .await?;
+
+    assert_eq!(family.generation, 8);
+
+    assert_eq!(family.grandparent.id, 0);
+    assert_eq!(family.grandparent.name, "John");
+    assert_eq!(family.age, 61);
 
     assert_eq!(family.parent.id, 1);
     assert_eq!(family.parent.name, "Bob");
@@ -307,4 +435,23 @@ async fn parameter_list() -> Result {
     assert_eq!(ids[1].0, 3);
 
     Ok(())
+}
+
+#[derive(Debug, FromSqlRow)]
+struct Person {
+    id: i32,
+    name: String,
+}
+
+#[derive(Debug, FromSqlRow)]
+#[row(partition(split = "id"))]
+struct Family {
+    generation: i32,
+    #[row(flatten)]
+    grandparent: Person,
+    age: i32,
+    #[row(flatten)]
+    parent: Person,
+    #[row(flatten)]
+    child: Person,
 }
