@@ -246,10 +246,13 @@ where
 
 /// Split a row's columns into multiple partitions based on some split-points.
 ///
-/// A split point defines the index of column right before the column with the same name:
+/// # Split
+///
+/// Given a list of column labels, a split is made right before the first column with a matching
+/// name following the previous split:
 ///
 /// ```text
-/// Labels:      [a,    a,      c,  a]
+/// Labels:       a,    a,      c,  a
 /// Indices:      0 1 2 3 4 5 6 7 8 9 10
 /// Columns:      a b c a b a b c b a c
 /// Splits:      |     |       |   |   
@@ -260,8 +263,8 @@ where
 /// The first partition always contains the leading columns (zero or more):
 ///
 /// ```text
-/// Labels:     [   b,  a]
-/// Indices:    0 1 2 3 4 5 6 7 8 9 10
+/// Labels:         b,  a
+/// Indices:    0 1 2 3 4 5
 /// Columns:    d a b c a b
 /// Splits:        |   |
 /// Partitions: +-+ +-+ +-+
