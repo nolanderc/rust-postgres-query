@@ -46,6 +46,7 @@ async fn simple_select() -> Result {
     let value: i32 = row.get(0);
 
     assert_eq!(value, 14);
+
     Ok(())
 }
 
@@ -56,6 +57,7 @@ async fn simple_select_fetch() -> Result {
     let value: (i32,) = query!("SELECT 14").fetch_one(&client).await?;
 
     assert_eq!(value, (14,));
+
     Ok(())
 }
 
@@ -71,6 +73,7 @@ async fn cached_fetch() -> Result {
         assert_eq!(name, "Myke");
         assert_eq!(age, 31);
     }
+
     Ok(())
 }
 
@@ -89,6 +92,7 @@ async fn fetch_named_struct() -> Result {
 
     assert_eq!(person.name, "Myke");
     assert_eq!(person.age, 31);
+
     Ok(())
 }
 
@@ -108,6 +112,7 @@ async fn fetch_named_struct_rename() -> Result {
 
     assert_eq!(person.customer, "Myke");
     assert_eq!(person.age, 31);
+
     Ok(())
 }
 
@@ -230,7 +235,7 @@ async fn fetch_joined_relations() -> Result {
 }
 
 #[tokio::test]
-async fn multi_mapping() -> Result {
+async fn multi_mapping_exact() -> Result {
     let mut client = establish().await?;
     let tx = client.transaction().await?;
 
@@ -241,9 +246,8 @@ async fn multi_mapping() -> Result {
     }
 
     #[derive(Debug, FromSqlRow)]
-    #[row(partition(exact))]
+    #[row(exact)]
     struct Family {
-        generation: i32,
         #[row(flatten)]
         parent: Person,
         #[row(flatten)]
@@ -252,7 +256,47 @@ async fn multi_mapping() -> Result {
 
     let family = query!(
         "SELECT 
-            7 as generation, 
+            1 as id, 'Bob' as name, 
+            2 as id, 'Ike' as name"
+    )
+    .fetch_one::<Family, _>(&tx)
+    .await?;
+
+    assert_eq!(family.parent.id, 1);
+    assert_eq!(family.parent.name, "Bob");
+
+    assert_eq!(family.child.id, 2);
+    assert_eq!(family.child.name, "Ike");
+
+    Ok(())
+}
+
+#[tokio::test]
+async fn multi_mapping_exact_mixed_fields() -> Result {
+    let mut client = establish().await?;
+    let tx = client.transaction().await?;
+
+    #[derive(Debug, FromSqlRow)]
+    struct Person {
+        id: i32,
+        name: String,
+    }
+
+    #[derive(Debug, FromSqlRow)]
+    #[row(exact)]
+    struct Family {
+        generation: i32,
+        origin: String,
+        #[row(flatten)]
+        parent: Person,
+        #[row(flatten)]
+        child: Person,
+    }
+
+    let family = query!(
+        // Order shouldn't matter within one group
+        "SELECT 
+            'Germany' as origin, 7 as generation, 
             1 as id, 'Bob' as name, 
             2 as id, 'Ike' as name"
     )
@@ -260,6 +304,7 @@ async fn multi_mapping() -> Result {
     .await?;
 
     assert_eq!(family.generation, 7);
+    assert_eq!(family.origin, "Germany");
 
     assert_eq!(family.parent.id, 1);
     assert_eq!(family.parent.name, "Bob");
@@ -282,7 +327,7 @@ async fn multi_mapping_excessive_colunms() -> Result {
     }
 
     #[derive(Debug, FromSqlRow)]
-    #[row(partition(split = "id"))]
+    #[row(split = "id")]
     struct Family {
         #[row(flatten)]
         grandparent: Person,
@@ -325,7 +370,7 @@ async fn multi_mapping_leading_columns() -> Result {
     }
 
     #[derive(Debug, FromSqlRow)]
-    #[row(partition(split = "id"))]
+    #[row(split = "id")]
     struct Family {
         generation: i32,
         #[row(flatten)]
@@ -372,7 +417,7 @@ async fn multi_mapping_mixed() -> Result {
     }
 
     #[derive(Debug, FromSqlRow)]
-    #[row(partition(split = "id"))]
+    #[row(split = "id")]
     struct Family {
         generation: i32,
         #[row(flatten)]
@@ -415,7 +460,7 @@ async fn multi_mapping_explicit_split() -> Result {
     let tx = client.transaction().await?;
 
     #[derive(Debug, FromSqlRow)]
-    #[row(partition(split))]
+    #[row(split)]
     struct Family {
         generation: i32,
         #[row(split = "id")]
@@ -459,7 +504,7 @@ async fn multi_mapping_mixed_explicit_split() -> Result {
     }
 
     #[derive(Debug, FromSqlRow)]
-    #[row(partition(split = "id"))]
+    #[row(split = "id")]
     struct Family {
         generation: i32,
         #[row(flatten)]
@@ -519,23 +564,4 @@ async fn parameter_list() -> Result {
     assert_eq!(ids[1].0, 3);
 
     Ok(())
-}
-
-#[derive(Debug, FromSqlRow)]
-struct Person {
-    id: i32,
-    name: String,
-}
-
-#[derive(Debug, FromSqlRow)]
-#[row(partition(split = "id"))]
-struct Family {
-    generation: i32,
-    #[row(flatten)]
-    grandparent: Person,
-    age: i32,
-    #[row(flatten)]
-    parent: Person,
-    #[row(flatten)]
-    child: Person,
 }
