@@ -1,7 +1,9 @@
-use syn::{Attribute, Ident, Lit, Meta, MetaList, NestedMeta, Result};
+use proc_macro2::Span;
+use std::ops::Deref;
+use syn::{spanned::Spanned, Attribute, Lit, Meta, NestedMeta, Result};
 
 pub struct ContainerAttributes {
-    pub partition: Option<PartitionKind>,
+    pub partition: Option<Attr<PartitionKind>>,
 }
 
 pub struct FieldAttributes {
@@ -10,20 +12,86 @@ pub struct FieldAttributes {
     pub splits: Vec<String>,
 }
 
+pub struct Attr<T> {
+    pub source: Span,
+    pub value: T,
+}
+
 pub enum PartitionKind {
     Exact,
     Split(Option<String>),
 }
 
+impl<T> Attr<T> {
+    pub fn new(span: impl Spanned, value: T) -> Self {
+        Attr {
+            source: span.span(),
+            value,
+        }
+    }
+}
+
+impl<T> Deref for Attr<T> {
+    type Target = T;
+    fn deref(&self) -> &Self::Target {
+        &self.value
+    }
+}
+
 macro_rules! set_or_err {
-    ($item:ident, $var:ident, $val:expr) => {
+    ($var:ident, $val:expr, $err:expr) => {
         if $var.is_some() {
-            Err(err!($item, "attribute specified twice"))
+            Err($err)
         } else {
             $var = Some($val);
             Ok(())
         }
     };
+}
+
+macro_rules! err_duplicate_attribute {
+    ($item:expr, $attr:literal) => {
+        err!($item, concat!("attribute specified twice: `", $attr, "`"))
+    };
+}
+
+macro_rules! err_multiple_partition {
+    ($item:expr) => {
+        err!(
+            $item,
+            "only one partitioning scheme may be specified (either `split` or `exact`)"
+        )
+    };
+}
+
+macro_rules! err_expected_variant {
+    ($item:expr, $name:literal, [$($kind:ident),+]) => {
+        err!(
+            $item,
+            concat!(
+                "malformed attribute, expected: ",
+                err_expected_variant!(@concat: $name, [$($kind),+])
+            )
+        )
+    };
+    (@concat: $name:literal, [$head:ident, $mid:ident, $($tail:ident),+]) => {
+        concat!(
+            err_expected_variant!(@format: $name, $head), ", ",
+            err_expected_variant!(@concat: $name, [$mid, $($tail),+])
+        )
+    };
+    (@concat: $name:literal, [$head:ident, $last:ident]) => {
+        concat!(
+            err_expected_variant!(@format: $name, $head), " or ",
+            err_expected_variant!(@format: $name, $last)
+        )
+    };
+    (@concat: $name:literal, [$head:ident]) => {
+        err_expected_variant!(@format: $name, $head)
+    };
+    (@format: $name:literal, Path) => { concat!("`", $name, "`") };
+    (@format: $name:literal, NameValue) => { concat!("`", $name, " = \"...\"`") };
+    (@format: $name:literal, List) => { concat!("`", $name, "(...)`") };
 }
 
 impl ContainerAttributes {
@@ -36,30 +104,27 @@ impl ContainerAttributes {
 
         for item in items {
             use Meta::{NameValue, Path};
-            let result = match meta_ident(&item)?.to_string().as_str() {
-                "partition" => expect_list("partition", &item, |list| {
-                    for arg in nested_meta(list)? {
-                        match arg {
-                            Path(path) if path.is_ident("exact") => {
-                                set_or_err!(arg, partition, PartitionKind::Exact)?
-                            }
-                            Path(path) if path.is_ident("split") => {
-                                set_or_err!(arg, partition, PartitionKind::Split(None))?
-                            }
-                            NameValue(pair) if pair.path.is_ident("split") => {
-                                let text = lit_string(&pair.lit)?;
-                                set_or_err!(arg, partition, PartitionKind::Split(Some(text)))?
-                            }
-                            _ => return Err(err!(arg, "unexpected argument")),
-                        }
+            match &item {
+                item if item.path().is_ident("exact") => match item {
+                    Path(_) => {
+                        let kind = Attr::new(item, PartitionKind::Exact);
+                        set_or_err!(partition, kind, err_multiple_partition!(item))?;
                     }
-                    Ok(())
-                }),
-                ident => Err(err!(item, "unknown attribute: `{}`", ident)),
-            };
-
-            if let Err(e) = result {
-                return Err(e);
+                    _ => return Err(err_expected_variant!(item, "exact", [Path])),
+                },
+                item if item.path().is_ident("split") => match item {
+                    Path(_) => {
+                        let kind = Attr::new(item, PartitionKind::Split(None));
+                        set_or_err!(partition, kind, err_multiple_partition!(item))?;
+                    }
+                    NameValue(pair) => {
+                        let text = lit_string(&pair.lit)?;
+                        let kind = Attr::new(item, PartitionKind::Split(Some(text)));
+                        set_or_err!(partition, kind, err_multiple_partition!(item))?;
+                    }
+                    _ => return Err(err_expected_variant!(item, "split", [Path, NameValue])),
+                },
+                item => return Err(err!(item, "unknown attribute",)),
             }
         }
 
@@ -82,11 +147,13 @@ impl FieldAttributes {
         for item in items {
             use Meta::{NameValue, Path};
             match &item {
-                Path(path) if path.is_ident("flatten") => set_or_err!(item, flatten, true)?,
+                Path(path) if path.is_ident("flatten") => {
+                    set_or_err!(flatten, true, err_duplicate_attribute!(item, "flatten"))?
+                }
 
                 NameValue(pair) if pair.path.is_ident("rename") => {
                     let text = lit_string(&pair.lit)?;
-                    set_or_err!(pair, rename, text)?;
+                    set_or_err!(rename, text, err_duplicate_attribute!(item, "rename"))?;
                 }
 
                 NameValue(pair) if pair.path.is_ident("split") => {
@@ -106,24 +173,6 @@ impl FieldAttributes {
 
         Ok(field)
     }
-}
-
-fn expect_list(name: &str, item: &Meta, mut f: impl FnMut(&MetaList) -> Result<()>) -> Result<()> {
-    match item {
-        Meta::List(list) => f(list),
-        Meta::Path(path) => Err(err!(path, "expected arguments: `{}(...)`", name)),
-        Meta::NameValue(pair) => Err(err!(pair.lit, "unexpected value")),
-    }
-}
-
-fn nested_meta(list: &MetaList) -> Result<Vec<&Meta>> {
-    list.nested
-        .iter()
-        .map(|nested| match nested {
-            NestedMeta::Meta(meta) => Ok(meta),
-            NestedMeta::Lit(literal) => Err(err!(literal, "expected identifier or key-value pair")),
-        })
-        .collect()
 }
 
 fn attribute_items<'a>(
@@ -159,10 +208,4 @@ fn lit_string(lit: &Lit) -> Result<String> {
         Lit::Str(text) => Ok(text.value()),
         _ => Err(err!(lit, "expected string literal")),
     }
-}
-
-fn meta_ident(meta: &Meta) -> Result<&Ident> {
-    let path = meta.path();
-    path.get_ident()
-        .ok_or_else(|| err!(path, "expected an identifier, found path"))
 }

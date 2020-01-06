@@ -85,13 +85,12 @@ fn extract_columns(input: &DeriveInput) -> Result<Extractor> {
     match &input.data {
         Data::Struct(data) => {
             let container = ContainerAttributes::from_attrs(&input.attrs)?;
-
             let props = extract_properties(&data)?;
 
             let columns = count_columns(&props);
 
             let (getters, locals) = if let Some(kind) = container.partition {
-                partition_initializers(props, kind)
+                partition_initializers(props, kind)?
             } else {
                 let row = Ident::new("row", Span::call_site());
                 field_initializers(&props, &row)
@@ -181,7 +180,7 @@ fn field_initializers(props: &[Property], row: &Ident) -> (TokenStream, Vec<Iden
     }
 
     let initializers = quote! {
-        #(#initializers)* 
+        #(#initializers)*
     };
 
     (initializers, idents)

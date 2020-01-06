@@ -1,8 +1,9 @@
+use super::attrs::Attr;
 use super::{field_initializers, Index, PartitionKind, Property};
 use proc_macro2::{Span, TokenStream};
 use quote::*;
 use std::mem;
-use syn::Ident;
+use syn::{Ident, Result};
 
 struct ExactPartition {
     len: TokenStream,
@@ -16,16 +17,32 @@ enum Split {
 
 pub(super) fn partition_initializers(
     props: Vec<Property>,
-    kind: PartitionKind,
-) -> (TokenStream, Vec<Ident>) {
-    match kind {
+    kind: Attr<PartitionKind>,
+) -> Result<(TokenStream, Vec<Ident>)> {
+    match kind.value {
         PartitionKind::Exact => {
             let partitions = exact::partition(props);
-            exact::initializers(partitions)
+            Ok(exact::initializers(partitions))
         }
         PartitionKind::Split(name) => {
-            let partitions = split::partition(props, name);
-            split::initializers(partitions)
+            let splits = split::partition(props, name);
+
+            let split_count = splits
+                .iter()
+                .filter(|split| match split {
+                    Split::Column(_) => true,
+                    _ => false,
+                })
+                .count();
+
+            if split_count == 0 {
+                return Err(err!(
+                    kind.source,
+                    "using split partitioning without any `#[row(split = \"...\")]` points"
+                ));
+            }
+
+            Ok(split::initializers(splits))
         }
     }
 }
