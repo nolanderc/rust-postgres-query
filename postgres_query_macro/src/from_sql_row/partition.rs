@@ -21,7 +21,7 @@ pub(super) fn partition_initializers(
 ) -> Result<(TokenStream, Vec<Ident>)> {
     match kind.value {
         PartitionKind::Exact => {
-            let partitions = exact::partition(props);
+            let partitions = exact::partition(props)?;
             Ok(exact::initializers(partitions))
         }
         PartitionKind::Split(name) => {
@@ -37,7 +37,7 @@ pub(super) fn partition_initializers(
 
             if split_count == 0 {
                 return Err(err!(
-                    kind.source,
+                    kind.span,
                     "using split partitioning without any `#[row(split = \"...\")]` points"
                 ));
             }
@@ -50,46 +50,60 @@ pub(super) fn partition_initializers(
 mod exact {
     use super::*;
 
-    pub(super) fn partition(props: Vec<Property>) -> Vec<ExactPartition> {
+    pub(super) fn partition(props: Vec<Property>) -> Result<Vec<ExactPartition>> {
         let mut partitions = Vec::new();
         let mut props = props.into_iter().peekable();
 
-        let standalone = |prop: &Property| match prop.index {
-            Index::Position | Index::Name(_) => true,
-            Index::Flatten => false,
+        let merge = |prop: &Property| match prop.index {
+            Index::Position | Index::Name(_) => prop.attrs.stride.is_none(),
+            _ => false,
         };
 
         while let Some(prop) = props.next() {
-            if standalone(&prop) {
-                let mut properties = vec![prop];
-
-                while let Some(prop) = props.peek() {
-                    if standalone(prop) {
-                        properties.push(props.next().unwrap());
-                    } else {
-                        break;
-                    }
+            match prop {
+                prop if prop.attrs.stride.is_some() => {
+                    let stride = prop.attrs.stride.unwrap().value;
+                    partitions.push(ExactPartition {
+                        len: quote! { #stride },
+                        properties: vec![prop],
+                    });
                 }
 
-                let len = properties.len();
-                partitions.push(ExactPartition {
-                    len: quote! { #len },
-                    properties,
-                });
-            } else {
-                let ty = &prop.ty;
-                let lib = lib!();
-                let len = quote! {
-                    <#ty as #lib::FromSqlRow>::COLUMN_COUNT
-                };
-                partitions.push(ExactPartition {
-                    len,
-                    properties: vec![prop],
-                });
+                prop if merge(&prop) => {
+                    let mut properties = vec![prop];
+
+                    while let Some(prop) = props.peek() {
+                        if merge(prop) {
+                            properties.push(props.next().unwrap());
+                        } else {
+                            break;
+                        }
+                    }
+
+                    let len = properties.len();
+                    partitions.push(ExactPartition {
+                        len: quote! { #len },
+                        properties,
+                    });
+                }
+
+                prop if is_match!(prop.index, Index::Flatten) => {
+                    let ty = &prop.ty;
+                    let lib = lib!();
+                    let len = quote! {
+                        <#ty as #lib::FromSqlRow>::COLUMN_COUNT
+                    };
+                    partitions.push(ExactPartition {
+                        len,
+                        properties: vec![prop],
+                    });
+                }
+
+                _ => return Err(err!(prop.span, "failed to compute `stride` for field")),
             }
         }
 
-        partitions
+        Ok(partitions)
     }
 
     pub(super) fn initializers(partitions: Vec<ExactPartition>) -> (TokenStream, Vec<Ident>) {
@@ -108,7 +122,8 @@ mod exact {
             let lib = lib!();
             let advance = quote! {
                 let #end = #previous_end + #len;
-                let ref #current = #lib::extract::Row::slice(row, #previous_end..#end)?;
+                let #current = #lib::extract::Row::slice(row, #previous_end..#end)?;
+                let #current = &#current;
             };
 
             previous_end = end;
@@ -155,7 +170,7 @@ mod split {
             }
 
             for name in &prop.attrs.splits {
-                split_column(name.clone());
+                split_column(name.value.clone());
             }
 
             group.push(prop);
@@ -193,9 +208,14 @@ mod split {
             #row_trait::slice(row, splits.next().unwrap()?)?
         };
 
-        fragments.push(quote! {
-            let ref #first_partition = #next_partition;
-        });
+        let advance = |partition: &Ident| {
+            quote! {
+                let #partition = #next_partition;
+                let #partition = &#partition;
+            }
+        };
+
+        fragments.push(advance(&first_partition));
 
         let mut splits = 0;
         let mut partition = first_partition;
@@ -205,10 +225,7 @@ mod split {
                 Split::Column(_) => {
                     splits += 1;
                     partition = partition_ident(splits);
-                    let advance = quote! {
-                        let ref #partition = #next_partition;
-                    };
-                    fragments.push(advance);
+                    fragments.push(advance(&partition));
                 }
                 Split::Group(props) => {
                     let (initializers, idents) = field_initializers(&props, &partition);

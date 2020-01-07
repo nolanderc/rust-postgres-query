@@ -13,3 +13,12 @@ macro_rules! lib {
     }};
 }
 
+macro_rules! is_match {
+    ($expr:expr, $pattern:pat) => {
+        match $expr {
+            $pattern => true,
+            _ => false,
+        }
+    }
+}
+

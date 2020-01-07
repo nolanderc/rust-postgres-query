@@ -1,14 +1,17 @@
 mod attrs;
 mod partition;
+mod validate;
 
 use attrs::{ContainerAttributes, FieldAttributes, PartitionKind};
 use partition::partition_initializers;
 use proc_macro2::{Span, TokenStream};
 use quote::*;
 use syn::{
+    spanned::Spanned,
     token::{Enum, Union},
     Data, DataEnum, DataStruct, DataUnion, DeriveInput, Fields, Ident, Result, Type,
 };
+use validate::validate_properties;
 
 pub fn derive(input: DeriveInput) -> TokenStream {
     let ident = &input.ident;
@@ -79,6 +82,7 @@ struct Property {
     ty: Type,
     attrs: FieldAttributes,
     index: Index,
+    span: Span,
 }
 
 fn extract_columns(input: &DeriveInput) -> Result<Extractor> {
@@ -86,6 +90,8 @@ fn extract_columns(input: &DeriveInput) -> Result<Extractor> {
         Data::Struct(data) => {
             let container = ContainerAttributes::from_attrs(&input.attrs)?;
             let props = extract_properties(&data)?;
+
+            validate_properties(&container, &props)?;
 
             let columns = count_columns(&props);
 
@@ -144,6 +150,7 @@ fn extract_properties(data: &DataStruct) -> Result<Vec<Property>> {
             ty: field.ty.clone(),
             attrs,
             index,
+            span: field.span(),
         });
     }
 
