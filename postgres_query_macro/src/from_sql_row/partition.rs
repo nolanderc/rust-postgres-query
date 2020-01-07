@@ -24,8 +24,8 @@ pub(super) fn partition_initializers(
             let partitions = exact::partition(props)?;
             Ok(exact::initializers(partitions))
         }
-        PartitionKind::Split(name) => {
-            let splits = split::partition(props, name);
+        PartitionKind::Split => {
+            let splits = split::partition(props);
 
             let split_count = splits
                 .iter()
@@ -151,7 +151,7 @@ mod exact {
 mod split {
     use super::*;
 
-    pub(super) fn partition(props: Vec<Property>, implicit: Option<String>) -> Vec<Split> {
+    pub(super) fn partition(props: Vec<Property>) -> Vec<Split> {
         let mut splits = Vec::new();
         let mut group = Vec::new();
 
@@ -162,12 +162,6 @@ mod split {
                 }
                 splits.push(Split::Column(name));
             };
-
-            if let Some(implicit) = implicit.as_ref() {
-                if let Index::Flatten = prop.index {
-                    split_column(implicit.clone());
-                }
-            }
 
             for name in &prop.attrs.splits {
                 split_column(name.value.clone());

@@ -23,7 +23,7 @@ pub struct Attr<T> {
 
 pub enum PartitionKind {
     Exact,
-    Split(Option<String>),
+    Split,
 }
 
 impl<T> Attr<T> {
@@ -73,7 +73,7 @@ macro_rules! err_expected_variant {
         err!(
             $item,
             concat!(
-                "malformed attribute, expected: ",
+                "malformed attribute, expected ",
                 err_expected_variant!(@concat: $name, [$($kind),+])
             )
         )
@@ -93,9 +93,9 @@ macro_rules! err_expected_variant {
     (@concat: $name:literal, [$head:ident]) => {
         err_expected_variant!(@format: $name, $head)
     };
-    (@format: $name:literal, Path) => { concat!("`", $name, "`") };
-    (@format: $name:literal, NameValue) => { concat!("`", $name, " = \"...\"`") };
-    (@format: $name:literal, List) => { concat!("`", $name, "(...)`") };
+    (@format: $name:literal, Path) => { concat!("an identifier (`", $name, "`)") };
+    (@format: $name:literal, NameValue) => { concat!("key-value (`", $name, " = \"...\"`)") };
+    (@format: $name:literal, List) => { concat!("a list (`", $name, "(...)`)") };
 }
 
 impl ContainerAttributes {
@@ -107,7 +107,7 @@ impl ContainerAttributes {
         let mut partition = None;
 
         for item in items {
-            use Meta::{NameValue, Path};
+            use Meta::Path;
             match &item {
                 item if item.path().is_ident("exact") => match item {
                     Path(_) => {
@@ -118,15 +118,10 @@ impl ContainerAttributes {
                 },
                 item if item.path().is_ident("split") => match item {
                     Path(_) => {
-                        let kind = Attr::new(item, PartitionKind::Split(None));
+                        let kind = Attr::new(item, PartitionKind::Split);
                         set_or_err!(partition, kind, err_multiple_partition!(item))?;
                     }
-                    NameValue(pair) => {
-                        let text = lit_string(&pair.lit)?;
-                        let kind = Attr::new(item, PartitionKind::Split(Some(text)));
-                        set_or_err!(partition, kind, err_multiple_partition!(item))?;
-                    }
-                    _ => return Err(err_expected_variant!(item, "split", [Path, NameValue])),
+                    _ => return Err(err_expected_variant!(item, "split", [Path])),
                 },
                 item => return Err(err!(item, "unknown attribute",)),
             }

@@ -322,7 +322,8 @@ fn partition_many<'a>(
             }
         } else {
             let (last, _) = columns.by_ref().last()?;
-            Some(SplitResult::Range(previous_end..last + 1))
+            let len = last + 1;
+            Some(SplitResult::Range(previous_end..len))
         }
     })
 }

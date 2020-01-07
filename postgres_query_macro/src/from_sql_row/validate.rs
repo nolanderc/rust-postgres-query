@@ -17,7 +17,7 @@ fn check_split_in_non_split_container(
 ) -> Result<()> {
     let is_split = is_match!(
         container.partition.as_ref().map(|attr| &attr.value),
-        Some(PartitionKind::Split(_))
+        Some(PartitionKind::Split)
     );
 
     if is_split {

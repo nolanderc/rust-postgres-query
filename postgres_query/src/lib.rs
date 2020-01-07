@@ -93,9 +93,9 @@
 //!
 //! If you query the same table multiple times it gets tedious to have to redefine structs with the
 //! same fields over and over. Preferably we would like to reuse the same definition multiple times.
-//! We can do this be utilizing "multi-mapping". 
+//! We can do this be utilizing "multi-mapping".
 //!
-//! 
+//!
 //! ### Partitions
 //!
 //! Multi-mapping works by splitting the columns of rows returned by a query into multiple
@@ -141,17 +141,42 @@
 //! }
 //!
 //! #[derive(FromSqlRow)]
-//! #[row(split = "id")]
+//! #[row(split)]
 //! struct BookAuthor {
-//!     #[row(flatten)]
+//!     #[row(flatten, split = "id")]
 //!     book: Book,
-//!     #[row(flatten)]
+//!     #[row(flatten, split = "id")]
 //!     author: Author,
 //! }
 //! ```
-//! 
+//!
+//! Alternatively, we can make `Author` a part of the `Book` struct:
+//!
+//! ```
+//! # use postgres_query::FromSqlRow;
+//! #[derive(FromSqlRow)]
+//! struct Author {
+//!     id: i32,
+//!     name: String,
+//!     birthyear: i32,
+//! }
+//!
+//! #[derive(FromSqlRow)]
+//! #[row(split)]
+//! struct Book {
+//!     #[row(split = "id")]
+//!     id: i32,
+//!     title: String,
+//!     release_date: String,
+//!     genre: String,
+//!     #[row(flatten, split = "id")]
+//!     author: Author,
+//! }
+//! ```
+//!
 //! See the section on [attributes](./derive.FromSqlRow.html#attributes) for more advanced
 //! partitioning.
+//!
 //!
 //! # Caching queries
 //!
@@ -225,73 +250,20 @@ pub use extract::FromSqlRow;
 /// ```
 ///
 ///
-/// # Multi-mapping
-///
-/// If you query the same table multiple times it gets tedious to have to redefine structs with the
-/// same fields over and over. Preferably we would like to reuse the same definition multiple times.
-/// We can do this be utilizing "multi-mapping". 
-///
-/// 
-/// ## Partitions
-///
-/// Multi-mapping works by splitting the columns of rows returned by a query into multiple
-/// partitions (or slices). For example, if we had the query `SELECT books.*, authors.* FROM ...`,
-/// we would like to extract the data into two structs: `Book` and `Author`. We accomplish this by
-/// looking at the columns returned by the database and splitting them into partitions:
-///
-/// ```text
-/// Columns:    id, title, release_date, genre, id, name, birthyear
-/// Partitions: +------------Book-------------+ +------Author-----+
-/// ```
-///
-///
-/// ## Partitioning schemes
-///
-/// There are two supported ways to partition a row: either we specify the number of columns
-/// required to populate each struct (in the example above: 4 columns for Book and 3 for author), or
-/// we split on the name of a column. The former should generally only be used when you know the
-/// number of columns isn't going to change. The latter is less prone to break provided you choose
-/// an appropriate column to split on (a good candidate is usually `id` as almost all tables have
-/// this as their first
-/// column).
-///
-/// You choose which partitioning scheme you want to use by using the provided
-/// [attributes](#attributes). In order to accomplish the partitioning in the example above we
-/// could split on the column name `id`:
-///
-/// ```
-/// # use postgres_query::FromSqlRow;
-/// #[derive(FromSqlRow)]
-/// struct Book {
-///     id: i32,
-///     title: String,
-///     release_date: String,
-///     genre: String,
-/// }
-///
-/// #[derive(FromSqlRow)]
-/// struct Author {
-///     id: i32,
-///     name: String,
-///     birthyear: i32,
-/// }
-///
-/// #[derive(FromSqlRow)]
-/// #[row(split = "id")]
-/// struct BookAuthor {
-///     #[row(flatten)]
-///     book: Book,
-///     #[row(flatten)]
-///     author: Author,
-/// }
-/// ```
-/// 
-/// See the section on (attributes)[#attributes] for more advanced partitioning.
-///
-///
 /// # Attributes
 ///
-/// Data extraction can be customized by using the `row` attribute.
+/// Data extraction can be customized by using the `#[row(...)]` attribute. Attributes can be
+/// separated into two categories, those which go on the container itself:
+///
+/// - [`#[row(exact)]`](#rowexact)
+/// - [`#[row(split)]`](#rowsplit)
+///
+/// and those which are placed on the container's fields:
+///
+/// - [`#[row(rename = "...")]`](#rowrename--)
+/// - [`#[row(flatten)]`](#rowflatten)
+/// - [`#[row(stride = N)]`](#rowstride--n)
+/// - [`#[row(split = "...")]`](#rowsplit--)
 ///
 ///
 /// ## Container attributes
@@ -301,7 +273,8 @@ pub use extract::FromSqlRow;
 ///
 /// ### `#[row(exact)]`
 ///
-/// [Partition](#multi-mapping) the row according to the number of columns matched by each group.
+/// [Partition](./index.html#multi-mapping) the row according to the number of columns matched by
+/// each group.
 ///
 /// Note that no order is forced upon fields within any group. In the example below, that means that
 /// even though the `generation` and `origin` fields are flipped relative to the query, the
@@ -343,7 +316,7 @@ pub use extract::FromSqlRow;
 ///
 /// ### `#[row(split)]`
 ///
-/// [Partition](#multi-mapping) the row according to the field's [split
+/// [Partition](./index.html#multi-mapping) the row according to the field's [split
 /// points](extract/fn.split_columns_many.html#split-points).
 ///
 /// Split points are introduced by using the [`#[row(split = "...")]`](#rowsplit---1) attribute on
@@ -362,49 +335,6 @@ pub use extract::FromSqlRow;
 ///     #[row(flatten, split = "id")]
 ///     parent: Person,
 ///     #[row(flatten, split = "id")]
-///     child: Person,
-/// }
-///
-/// #[derive(FromSqlRow)]
-/// struct Person {
-///     id: i32,
-///     name: String,
-/// }
-///
-/// let family = query!(
-///     "SELECT
-///         'Germany' as origin, 7 as generation,
-///         1 as id, 'Bob' as name,
-///         2 as id, 'Ike' as name"
-///     )
-///     .fetch_one::<Family, _>(&client)
-///     .await?;
-/// # Ok(())
-/// # }
-/// ```
-///
-///
-/// ### `#[row(split = "...")]`
-///
-/// Like `#[row(split)]` but an implicit split point is inserted before every `#[row(flatten)]`ed
-/// field.
-///
-/// The following example using implicit split points is equivalent to the example with explicit
-/// splits above:
-///
-/// ```
-/// # use postgres_query::{FromSqlRow, Result, query};
-/// # use tokio_postgres::Client;
-/// # async fn foo() -> Result<()> {
-/// # let client: Client = unimplemented!();
-/// #[derive(FromSqlRow)]
-/// #[row(split = "id")]
-/// struct Family {
-///     generation: i32,
-///     origin: String,
-///     #[row(flatten)]
-///     parent: Person,
-///     #[row(flatten)]
 ///     child: Person,
 /// }
 ///
@@ -481,6 +411,50 @@ pub use extract::FromSqlRow;
 /// # }
 /// ```
 ///
+/// ### `#[row(stride = N)]`
+///
+/// Puts this field into a partition with exactly `N` columns. Only available when using the
+/// `#[row(exact)]` attribute on the container,
+///
+/// ```
+/// # use postgres_query::{FromSqlRow, query, Result};
+/// # use tokio_postgres::Client;
+/// # async fn foo() -> Result<()> {
+/// # let client: Client = unimplemented!();
+/// #[derive(Debug, FromSqlRow)]
+/// struct Person {
+///     id: i32,
+///     name: String,
+/// }
+///
+/// #[derive(Debug, FromSqlRow)]
+/// #[row(exact)]
+/// struct Family {
+///     // Matches first 4 columns
+///     #[row(flatten, stride = 4)]
+///     parent: Person,
+///     // Matches last 3 columns
+///     #[row(flatten, stride = 3)]
+///     child: Person,
+/// }
+///
+/// let family = query!(
+///     "SELECT
+///         11 as generation,
+///         1 as id, 'Bob' as name, 42 as age,
+///         2 as id, 'Ike' as name, 14 as age"
+///     )
+///     .fetch_one::<Family, _>(&client)
+///     .await?;
+///     
+/// assert_eq!(family.parent.id, 1);
+/// assert_eq!(family.parent.name, "Bob");
+/// assert_eq!(family.child.id, 2);
+/// assert_eq!(family.child.name, "Ike");
+/// # Ok(())
+/// # }
+/// ```
+///
 /// ### `#[row(split = "...")]`
 ///
 /// Introduce an additional [split](extract/fn.split_columns_many.html#split-points) right
@@ -492,6 +466,7 @@ pub use extract::FromSqlRow;
 /// ```
 /// # use postgres_query::{FromSqlRow};
 /// #[derive(FromSqlRow)]
+/// #[row(split)]
 /// struct User {
 ///     // `id` and `name` will only match the columns before `email`
 ///     id: i32,
@@ -511,6 +486,7 @@ pub use extract::FromSqlRow;
 /// ```
 /// # use postgres_query::{FromSqlRow, query};
 /// #[derive(FromSqlRow)]
+/// #[row(split)]
 /// struct Family {
 ///     #[row(flatten)]
 ///     parent: Person,
@@ -542,6 +518,7 @@ pub use extract::FromSqlRow;
 /// # use postgres_query::{FromSqlRow, query};
 /// # #[derive(FromSqlRow)] struct Person;
 /// #[derive(FromSqlRow)]
+/// #[row(split)]
 /// struct Family {
 ///     #[row(flatten, split = "id")]
 ///     parent: Person,
@@ -549,7 +526,6 @@ pub use extract::FromSqlRow;
 ///     child: Person,
 /// }
 /// ```
-///
 pub use postgres_query_macro::FromSqlRow;
 
 /// Constructs a new query.

@@ -272,6 +272,44 @@ async fn multi_mapping_exact() -> Result {
 }
 
 #[tokio::test]
+async fn multi_mapping_custom_stride() -> Result {
+    let mut client = establish().await?;
+    let tx = client.transaction().await?;
+
+    #[derive(Debug, FromSqlRow)]
+    struct Person {
+        id: i32,
+        name: String,
+    }
+
+    #[derive(Debug, FromSqlRow)]
+    #[row(exact)]
+    struct Family {
+        #[row(flatten, stride = 4)]
+        parent: Person,
+        #[row(flatten, stride = 3)]
+        child: Person,
+    }
+
+    let family = query!(
+        "SELECT 
+            11 as generation,
+            1 as id, 'Bob' as name, 42 as age, 
+            2 as id, 'Ike' as name, 14 as age"
+    )
+    .fetch_one::<Family, _>(&tx)
+    .await?;
+
+    assert_eq!(family.parent.id, 1);
+    assert_eq!(family.parent.name, "Bob");
+
+    assert_eq!(family.child.id, 2);
+    assert_eq!(family.child.name, "Ike");
+
+    Ok(())
+}
+
+#[tokio::test]
 async fn multi_mapping_exact_mixed_fields() -> Result {
     let mut client = establish().await?;
     let tx = client.transaction().await?;
@@ -327,13 +365,13 @@ async fn multi_mapping_excessive_colunms() -> Result {
     }
 
     #[derive(Debug, FromSqlRow)]
-    #[row(split = "id")]
+    #[row(split)]
     struct Family {
-        #[row(flatten)]
+        #[row(flatten, split = "id")]
         grandparent: Person,
-        #[row(flatten)]
+        #[row(flatten, split = "id")]
         parent: Person,
-        #[row(flatten)]
+        #[row(flatten, split = "id")]
         child: Person,
     }
 
@@ -370,14 +408,14 @@ async fn multi_mapping_leading_columns() -> Result {
     }
 
     #[derive(Debug, FromSqlRow)]
-    #[row(split = "id")]
+    #[row(split)]
     struct Family {
         generation: i32,
-        #[row(flatten)]
+        #[row(flatten, split = "id")]
         grandparent: Person,
-        #[row(flatten)]
+        #[row(flatten, split = "id")]
         parent: Person,
-        #[row(flatten)]
+        #[row(flatten, split = "id")]
         child: Person,
     }
 
@@ -417,15 +455,15 @@ async fn multi_mapping_mixed() -> Result {
     }
 
     #[derive(Debug, FromSqlRow)]
-    #[row(split = "id")]
+    #[row(split)]
     struct Family {
         generation: i32,
-        #[row(flatten)]
+        #[row(flatten, split = "id")]
         grandparent: Person,
         age: i32,
-        #[row(flatten)]
+        #[row(flatten, split = "id")]
         parent: Person,
-        #[row(flatten)]
+        #[row(flatten, split = "id")]
         child: Person,
     }
 
@@ -455,7 +493,7 @@ async fn multi_mapping_mixed() -> Result {
 }
 
 #[tokio::test]
-async fn multi_mapping_explicit_split() -> Result {
+async fn multi_mapping_stacked_splits() -> Result {
     let mut client = establish().await?;
     let tx = client.transaction().await?;
 
@@ -488,52 +526,6 @@ async fn multi_mapping_explicit_split() -> Result {
     assert_eq!(family.id, 0);
     assert_eq!(family.name, "Bob");
     assert_eq!(family.age, 32);
-
-    Ok(())
-}
-
-#[tokio::test]
-async fn multi_mapping_mixed_explicit_split() -> Result {
-    let mut client = establish().await?;
-    let tx = client.transaction().await?;
-
-    #[derive(Debug, FromSqlRow)]
-    struct Person {
-        id: i32,
-        name: String,
-    }
-
-    #[derive(Debug, FromSqlRow)]
-    #[row(split = "id")]
-    struct Family {
-        generation: i32,
-        #[row(flatten)]
-        grandparent: Person,
-        #[row(split = "id")]
-        age: i32,
-        #[row(flatten)]
-        child: Person,
-    }
-
-    let family = query!(
-        "SELECT 
-            8 as generation,
-            0 as id, 'John' as name, 61 as age, 
-            1 as id, 'Bob' as name, 32 as age, 
-            2 as id, 'Ike' as name, 7 as age"
-    )
-    .fetch_one::<Family, _>(&tx)
-    .await?;
-
-    assert_eq!(family.generation, 8);
-
-    assert_eq!(family.grandparent.id, 0);
-    assert_eq!(family.grandparent.name, "John");
-
-    assert_eq!(family.age, 32);
-
-    assert_eq!(family.child.id, 2);
-    assert_eq!(family.child.name, "Ike");
 
     Ok(())
 }
