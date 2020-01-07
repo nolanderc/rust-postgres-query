@@ -2,10 +2,9 @@ use proc_macro2::TokenStream;
 use quote::*;
 use syn::parse::{Parse, ParseStream};
 use syn::punctuated::Punctuated;
-use syn::spanned::Spanned;
 use syn::{
     Expr, ExprAssign, ExprLit, ExprPath, ExprReference, Ident, Lit, LitStr, Path, PathArguments,
-    Token,
+    Result, Token,
 };
 
 pub struct QueryInput {
@@ -14,18 +13,14 @@ pub struct QueryInput {
 }
 
 impl Parse for QueryInput {
-    fn parse(input: ParseStream) -> syn::Result<Self> {
-        let mut parameters = Punctuated::<Expr, Token![,]>::parse_terminated(input)?
-            .into_pairs()
-            .map(|pair| pair.into_value());
+    fn parse(input: ParseStream) -> Result<Self> {
+        let mut parameters = Punctuated::<Expr, Token![,]>::parse_terminated(input)?.into_iter();
 
         let text = parameters
             .next()
             .ok_or_else(|| input.error("argument missing: expected SQL query"))?;
 
-        let arguments = parameters
-            .map(expr_to_argument)
-            .collect::<syn::Result<_>>()?;
+        let arguments = parameters.map(expr_to_argument).collect::<Result<_>>()?;
 
         Ok(QueryInput { text, arguments })
     }
@@ -43,7 +38,8 @@ impl QueryInput {
                     Err(e) => return e.to_compile_error(),
                 };
 
-                let parameters = parameters.into_iter()
+                let parameters = parameters
+                    .into_iter()
                     .map(|expr| quote! { &#expr })
                     .collect::<Punctuated<_, Token![,]>>();
 
@@ -55,7 +51,7 @@ impl QueryInput {
                 }
             }
 
-            _ => syn::Error::new(self.text.span(), "expected string literal").to_compile_error(),
+            _ => err!(self.text, "expected string literal").to_compile_error(),
         }
     }
 }
@@ -63,7 +59,7 @@ impl QueryInput {
 fn parameter_substitution(
     text: LitStr,
     arguments: Vec<(Ident, Expr)>,
-) -> syn::Result<(String, Vec<Expr>)> {
+) -> Result<(String, Vec<Expr>)> {
     let value = text.value();
     let mut chars = value.chars().peekable();
 
@@ -88,9 +84,7 @@ fn parameter_substitution(
                     let index = arguments
                         .iter()
                         .position(|(ident, _)| ident == &name)
-                        .ok_or_else(|| {
-                            syn::Error::new(text.span(), format!("undefined argument `{}`", name))
-                        })?;
+                        .ok_or_else(|| err!(text, "undefined argument `{}`", name))?;
 
                     used[index] = true;
 
@@ -104,20 +98,19 @@ fn parameter_substitution(
 
     if let Some(unused) = used.into_iter().position(|used| !used) {
         let (ident, _) = &arguments[unused];
-        Err(syn::Error::new(ident.span(), "unused argument"))
+        Err(err!(ident, "unused argument"))
     } else {
         let parameters = arguments.into_iter().map(|(_, expr)| expr).collect();
         Ok((sql, parameters))
     }
 }
 
-fn expr_to_argument(expr: Expr) -> syn::Result<(Ident, Expr)> {
+fn expr_to_argument(expr: Expr) -> Result<(Ident, Expr)> {
     match expr {
         Expr::Assign(assign) => {
             let ExprAssign { left, right, .. } = assign;
 
-            let ident = expr_as_ident(&left)
-                .ok_or_else(|| syn::Error::new(left.span(), "expected an identifier"))?;
+            let ident = expr_as_ident(&left).ok_or_else(|| err!(left, "expected an identifier"))?;
 
             Ok((ident.clone(), *right))
         }
@@ -126,7 +119,7 @@ fn expr_to_argument(expr: Expr) -> syn::Result<(Ident, Expr)> {
             if let Some(ident) = expr_as_ident(&expr) {
                 Ok((ident.clone(), expr))
             } else {
-                Err(syn::Error::new(expr.span(), "expected an identifier"))
+                Err(err!(expr, "expected an identifier"))
             }
         }
 
@@ -136,12 +129,12 @@ fn expr_to_argument(expr: Expr) -> syn::Result<(Ident, Expr)> {
             if let Some(ident) = expr_as_ident(&inner) {
                 Ok((ident.clone(), expr))
             } else {
-                Err(syn::Error::new(expr.span(), "expected an identifier"))
+                Err(err!(expr, "expected an identifier"))
             }
         }
 
-        _ => Err(syn::Error::new(
-            expr.span(),
+        _ => Err(err!(
+            expr,
             "unexpected expression, expected either `<ident>` or `<ident> = <expr>`",
         )),
     }
