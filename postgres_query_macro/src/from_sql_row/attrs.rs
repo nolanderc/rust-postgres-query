@@ -1,5 +1,7 @@
 use proc_macro2::Span;
+use std::fmt::Display;
 use std::ops::Deref;
+use std::str::FromStr;
 use syn::{spanned::Spanned, Attribute, Lit, Meta, NestedMeta, Result};
 
 pub struct ContainerAttributes {
@@ -9,11 +11,13 @@ pub struct ContainerAttributes {
 pub struct FieldAttributes {
     pub flatten: bool,
     pub rename: Option<String>,
-    pub splits: Vec<String>,
+    pub splits: Vec<Attr<String>>,
+    pub stride: Option<Attr<usize>>,
 }
 
+#[derive(Copy, Clone)]
 pub struct Attr<T> {
-    pub source: Span,
+    pub span: Span,
     pub value: T,
 }
 
@@ -25,7 +29,7 @@ pub enum PartitionKind {
 impl<T> Attr<T> {
     pub fn new(span: impl Spanned, value: T) -> Self {
         Attr {
-            source: span.span(),
+            span: span.span(),
             value,
         }
     }
@@ -143,23 +147,42 @@ impl FieldAttributes {
         let mut flatten = None;
         let mut rename = None;
         let mut splits = Vec::new();
+        let mut stride = None;
 
         for item in items {
             use Meta::{NameValue, Path};
             match &item {
-                Path(path) if path.is_ident("flatten") => {
-                    set_or_err!(flatten, true, err_duplicate_attribute!(item, "flatten"))?
-                }
+                item if item.path().is_ident("flatten") => match item {
+                    Path(_) => {
+                        set_or_err!(flatten, true, err_duplicate_attribute!(item, "flatten"))?
+                    }
+                    _ => return Err(err_expected_variant!(item, "flatten", [Path])),
+                },
 
-                NameValue(pair) if pair.path.is_ident("rename") => {
-                    let text = lit_string(&pair.lit)?;
-                    set_or_err!(rename, text, err_duplicate_attribute!(item, "rename"))?;
-                }
+                item if item.path().is_ident("rename") => match item {
+                    NameValue(pair) => {
+                        let text = lit_string(&pair.lit)?;
+                        set_or_err!(rename, text, err_duplicate_attribute!(item, "rename"))?;
+                    }
+                    _ => return Err(err_expected_variant!(item, "rename", [NameValue])),
+                },
 
-                NameValue(pair) if pair.path.is_ident("split") => {
-                    let text = lit_string(&pair.lit)?;
-                    splits.push(text);
-                }
+                item if item.path().is_ident("split") => match item {
+                    NameValue(pair) => {
+                        let text = lit_string(&pair.lit)?;
+                        splits.push(Attr::new(pair, text));
+                    }
+                    _ => return Err(err_expected_variant!(item, "split", [NameValue])),
+                },
+
+                item if item.path().is_ident("stride") => match item {
+                    NameValue(pair) => {
+                        let step = lit_int(&pair.lit)?;
+                        let step = Attr::new(pair, step);
+                        set_or_err!(stride, step, err_duplicate_attribute!(item, "stride"))?
+                    }
+                    _ => return Err(err_expected_variant!(item, "split", [NameValue])),
+                },
 
                 item => return Err(err!(item, "unknown attribute")),
             }
@@ -169,6 +192,7 @@ impl FieldAttributes {
             flatten: flatten.unwrap_or(false),
             rename,
             splits,
+            stride,
         };
 
         Ok(field)
@@ -207,5 +231,16 @@ fn lit_string(lit: &Lit) -> Result<String> {
     match lit {
         Lit::Str(text) => Ok(text.value()),
         _ => Err(err!(lit, "expected string literal")),
+    }
+}
+
+fn lit_int<N>(lit: &Lit) -> Result<N>
+where
+    N: FromStr,
+    N::Err: Display,
+{
+    match lit {
+        Lit::Int(int) => int.base10_parse(),
+        _ => Err(err!(lit, "expected integer literal")),
     }
 }
