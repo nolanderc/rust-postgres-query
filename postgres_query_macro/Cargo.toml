@@ -1,6 +1,6 @@
 [package]
 name = "postgres_query_macro"
-version = "0.2.0"
+version = "0.3.0"
 authors = ["Christofer Nolander <christofer.nolander@gmail.com>"]
 edition = "2018"
 description = "Define SQL queries with human-readable parameter names"
