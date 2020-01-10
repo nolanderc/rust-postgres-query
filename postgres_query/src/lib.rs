@@ -167,6 +167,8 @@ pub use postgres_query_macro::FromSqlRow;
 ///
 /// # Usage
 ///
+/// This macro expands to an expression with the type `Query`.
+///
 /// The first parameter is the SQL query and is always given as a string literal. This string
 /// literal may contain parameter bindings on the form `$ident` where `ident` is any valid Rust
 /// identifier (`$abc`, `$value_123`, etc.). The order of the parameters does not matter.
@@ -204,12 +206,15 @@ macro_rules! query {
 ///
 /// # Usage
 ///
+/// This macro expands to an expression with the type `Result<Query>`.
+///
 /// The first parameter is the SQL query and is always given as a `&str`. This string may contain
 /// parameter bindings on the form `$ident` where `ident` is any valid Rust identifier (`$abc`,
 /// `$value_123`, etc.). The order of the parameters does not matter.
 ///
 /// ```
-/// # use postgres_query::query_dyn;
+/// # use postgres_query::{query_dyn, Result};
+/// # fn foo() -> Result<()> {
 /// // We can construct the actual query at runtime
 /// let mut sql = "INSERT INTO people VALUES".to_owned();
 /// sql.push_str("($age, $name)");
@@ -220,7 +225,9 @@ macro_rules! query {
 ///     &sql,
 ///     name = "John Wick", // Binds "$name" to "John Wick"
 ///     age,                // Binds "$age" to the value of `age`
-/// );
+/// )?;
+/// # Ok(())
+/// # }
 /// ```
 ///
 /// The query and all the parameters are passed into `Query::parse`, so the above would be expanded
@@ -251,7 +258,8 @@ macro_rules! query {
 /// Dynamic bindings may be mixed with static bindings:
 ///
 /// ```
-/// # use postgres_query::{query_dyn, Parameter};
+/// # use postgres_query::{query_dyn, Parameter, Result};
+/// # fn foo() -> Result<()> {
 /// let mut bindings = Vec::new();
 ///
 /// // We use the `as Parameter` to please the type checker.
@@ -264,7 +272,9 @@ macro_rules! query {
 ///     &sql,
 ///     height = 192,
 ///     ..bindings,
-/// );
+/// )?;
+/// # Ok(())
+/// # }
 /// ```
 ///
 ///
@@ -273,7 +283,8 @@ macro_rules! query {
 /// Let's say that we wanted to dynamically add filters to our query:
 ///
 /// ```
-/// # use postgres_query::{query_dyn, Parameter, Query};
+/// # use postgres_query::{query_dyn, Parameter, Query, Result};
+/// # fn foo() -> Result<()> {
 /// // We have the query we want to execute
 /// let mut sql = "SELECT * FROM people".to_string();
 ///
@@ -302,7 +313,9 @@ macro_rules! query {
 /// }
 ///
 /// // Then we can use it as normal.
-/// let query: Query = query_dyn!(&sql, ..bindings).unwrap();
+/// let query: Query = query_dyn!(&sql, ..bindings)?;
+/// # Ok(())
+/// # }
 /// ```
 #[macro_export]
 macro_rules! query_dyn {
@@ -332,7 +345,7 @@ pub use postgres_query_macro::{query_dynamic as __query_dynamic, query_static as
 /// bindings.push(("name", &"John" as Parameter));
 ///
 /// let query = query_dyn!(
-///     "SELECT * FROM people WHERE age > $age AND name = $name", 
+///     "SELECT * FROM people WHERE age > $age AND name = $name",
 ///     ..bindings
 /// )?;
 /// # Ok(())
@@ -360,7 +373,7 @@ pub type Parameter<'a> = &'a (dyn ToSql + Sync);
 ///
 ///
 /// ## Executing
-/// 
+///
 /// When executing the query you have two options, either:
 ///
 /// 1. use the provided methods: `execute`, `fetch`, `query`, etc.
