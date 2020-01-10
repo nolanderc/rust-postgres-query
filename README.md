@@ -39,6 +39,49 @@ for person in people {
 }
 ```
 
+# Features
+
+## Dynamic queries
+
+Queries may be constructed from either a string literal, in which case parameter
+bindings are computed at compile time, or any other `String` dynamically at
+runtime. The same is true for parameter bindings, which in the latter case can
+be added dynamically.
+
+Let's say that we wanted to dynamically add filters to our query:
+
+```rust
+// We have the query we want to execute
+let mut sql = "SELECT * FROM people".to_string();
+
+// and some filters we got from the user.
+let age_filter: Option<i32> = Some(32);
+let name_filter: Option<&str> = None;
+
+// Then we dynamically build a list of filters and bindings to use:
+let mut filters = Vec::new();
+let mut bindings = Vec::new();
+
+// We add the filters as needed.
+if let Some(age) = age_filter.as_ref() {
+    filters.push("age > $min_age");
+    bindings.push(("min_age", age as Parameter));
+}
+
+if let Some(name) = name_filter.as_ref() {
+    filters.push("name LIKE $name");
+    bindings.push(("name", name as Parameter));
+}
+
+// And append them to the query.
+if filters.len() > 0 {
+    sql += &format!(" WHERE {}", filters.join(" AND "));
+}
+
+// Then we can use it as normal.
+let query: Query = query_dyn!(&sql, ..bindings)?;
+```
+
 
 ## License
 
