@@ -66,7 +66,7 @@ async fn cached_fetch() -> Result {
     let client = establish().await?;
     let client = Caching::new(client);
 
-    for _ in 0..10 {
+    for _ in 0..10usize {
         let query = query!("SELECT 'Myke', 31");
         let (name, age): (String, i32) = query.fetch_one(&client).await?;
 

@@ -4,13 +4,13 @@
 //!
 //! [`Query`]: ../struct.Query.html
 
-use super::Query;
+use super::{Query, Sql};
 use crate::client::GenericClient;
 use crate::error::Result;
 use crate::extract::{self, FromSqlRow};
 use futures::{pin_mut, Stream, StreamExt, TryStreamExt};
 use thiserror::Error;
-use tokio_postgres::{error::Error as SqlError, Row};
+use tokio_postgres::{error::Error as SqlError, Row, Statement};
 
 /// An error that may arise when executing a query.
 #[derive(Debug, Error)]
@@ -33,7 +33,7 @@ impl<'a> Query<'a> {
     where
         C: GenericClient + Sync,
     {
-        let statement = client.prepare_static(self.sql).await.map_err(Error::from)?;
+        let statement = self.prepare(&client).await?;
         let rows = client
             .execute_raw(&statement, &self.parameters)
             .await
@@ -60,6 +60,7 @@ impl<'a> Query<'a> {
         C: GenericClient + Sync,
     {
         let row = self.query_one(client).await?;
+        dbg!(&row.columns());
         let value = T::from_row(&row).map_err(Error::from)?;
         Ok(value)
     }
@@ -86,7 +87,7 @@ impl<'a> Query<'a> {
     where
         C: GenericClient + Sync,
     {
-        let statement = client.prepare_static(self.sql).await.map_err(Error::from)?;
+        let statement = self.prepare(&client).await?;
         let rows = client
             .query_raw(&statement, &self.parameters)
             .await
@@ -103,7 +104,7 @@ impl<'a> Query<'a> {
     where
         C: GenericClient + Sync,
     {
-        let statement = client.prepare_static(self.sql).await.map_err(Error::from)?;
+        let statement = self.prepare(&client).await?;
         let rows = client
             .query_raw(&statement, &self.parameters)
             .await
@@ -128,11 +129,25 @@ impl<'a> Query<'a> {
     where
         C: GenericClient + Sync,
     {
-        let statement = client.prepare_static(self.sql).await.map_err(Error::from)?;
+        let statement = self.prepare(&client).await?;
         let rows = client
             .query_raw(&statement, &self.parameters)
             .await
             .map_err(Error::from)?;
         Ok(rows.map_err(Error::from).map_err(Into::into))
+    }
+}
+
+impl<'a> Query<'a> {
+    async fn prepare<C>(&self, client: &C) -> Result<Statement>
+    where
+        C: GenericClient + Sync,
+    {
+        let result = match &self.sql {
+            Sql::Static(text) => client.prepare_static(text).await,
+            Sql::Dynamic(text) => client.prepare(&text).await,
+        };
+
+        result.map_err(Error::Sql).map_err(Into::into)
     }
 }
