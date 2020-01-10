@@ -1,5 +1,8 @@
 extern crate proc_macro;
 
+#[macro_use]
+mod macros;
+
 mod query;
 mod from_sql_row;
 
@@ -14,7 +17,7 @@ pub fn query(input: TokenStream) -> TokenStream {
     TokenStream::from(output)
 }
 
-#[proc_macro_derive(FromSqlRow)]
+#[proc_macro_derive(FromSqlRow, attributes(row))]
 pub fn from_sql_row(input: TokenStream) -> TokenStream {
     let input = parse_macro_input!(input as DeriveInput);
     let output = from_sql_row::derive(input);
