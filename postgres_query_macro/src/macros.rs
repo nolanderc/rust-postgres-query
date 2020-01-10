@@ -1,5 +1,3 @@
-#![allow(unused_macros)]
-
 macro_rules! err {
     ($item:expr, $msg:expr) => {
         syn::Error::new(syn::spanned::Spanned::span(&$item), $msg)

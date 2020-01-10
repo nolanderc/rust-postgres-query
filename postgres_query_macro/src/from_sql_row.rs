@@ -1,51 +1,37 @@
+mod attrs;
+mod partition;
+mod validate;
+
+use attrs::{ContainerAttributes, FieldAttributes, PartitionKind};
+use partition::partition_initializers;
 use proc_macro2::{Span, TokenStream};
 use quote::*;
 use syn::{
+    spanned::Spanned,
     token::{Enum, Union},
-    Data, DataEnum, DataUnion, DeriveInput, Error, Field, Fields, Ident, Result,
+    Data, DataEnum, DataStruct, DataUnion, DeriveInput, Fields, Ident, Result, Type,
 };
+use validate::validate_properties;
 
 pub fn derive(input: DeriveInput) -> TokenStream {
-    let lib = quote! { postgres_query };
-
     let ident = &input.ident;
 
-    let columns = match extract_columns(&input) {
+    let Extractor {
+        getters,
+        locals,
+        columns,
+    } = match extract_columns(&input) {
         Ok(columns) => columns,
         Err(e) => return e.to_compile_error(),
     };
 
-    let mut idents = Vec::new();
-    let getters = columns
-        .into_iter()
-        .enumerate()
-        .map(|(i, column)| {
-            let index = match column.index {
-                Index::Position => quote! { #i },
-                Index::Name(name) => {
-                    let name = name.to_string();
-                    quote! { #name }
-                }
-            };
+    let constructor = make_constructor(&input, locals);
 
-            let field = column
-                .field
-                .ident
-                .unwrap_or_else(|| Ident::new(&format!("column_{}", i), Span::call_site()));
-            let ty = column.field.ty;
-
-            idents.push(field.clone());
-
-            quote! {
-                let #field = row.try_get::<_, #ty>(#index)?;
-            }
-        })
-        .collect::<TokenStream>();
-
-    let constructor = make_constructor(&input, idents);
-
+    let lib = lib!();
     quote! {
         impl #lib::FromSqlRow for #ident {
+            const COLUMN_COUNT: usize = #columns;
+
             fn from_row<R>(row: &R) -> Result<Self, #lib::extract::Error>
             where
                 R: #lib::extract::Row
@@ -54,50 +40,6 @@ pub fn derive(input: DeriveInput) -> TokenStream {
                 Ok(#constructor)
             }
         }
-    }
-}
-
-struct Column {
-    index: Index,
-    field: Field,
-}
-
-enum Index {
-    Position,
-    Name(Ident),
-}
-
-fn extract_columns(input: &DeriveInput) -> Result<Vec<Column>> {
-    match &input.data {
-        Data::Struct(data) => {
-            let columns = data
-                .fields
-                .iter()
-                .map(|field| {
-                    let index = match &field.ident {
-                        None => Index::Position,
-                        Some(name) => Index::Name(name.clone()),
-                    };
-                    Column {
-                        index,
-                        field: field.clone(),
-                    }
-                })
-                .collect();
-
-            Ok(columns)
-        }
-        Data::Enum(DataEnum {
-            enum_token: Enum { span },
-            ..
-        })
-        | Data::Union(DataUnion {
-            union_token: Union { span, .. },
-            ..
-        }) => Err(Error::new(
-            *span,
-            "`FromSqlRow` may only be derived for `struct`s",
-        )),
     }
 }
 
@@ -121,4 +63,151 @@ fn make_constructor(input: &DeriveInput, locals: impl IntoIterator<Item = Ident>
         },
         _ => panic!(),
     }
+}
+
+enum Index {
+    Position,
+    Flatten,
+    Name(String),
+}
+
+struct Extractor {
+    getters: TokenStream,
+    locals: Vec<Ident>,
+    columns: TokenStream,
+}
+
+struct Property {
+    ident: Ident,
+    ty: Type,
+    attrs: FieldAttributes,
+    index: Index,
+    span: Span,
+}
+
+fn extract_columns(input: &DeriveInput) -> Result<Extractor> {
+    match &input.data {
+        Data::Struct(data) => {
+            let container = ContainerAttributes::from_attrs(&input.attrs)?;
+            let props = extract_properties(&data)?;
+
+            validate_properties(&container, &props)?;
+
+            let columns = count_columns(&props);
+
+            let (getters, locals) = if let Some(kind) = container.partition {
+                partition_initializers(props, kind)?
+            } else {
+                let row = Ident::new("row", Span::call_site());
+                field_initializers(&props, &row)
+            };
+
+            Ok(Extractor {
+                getters,
+                locals,
+                columns,
+            })
+        }
+        Data::Enum(DataEnum {
+            enum_token: Enum { span },
+            ..
+        })
+        | Data::Union(DataUnion {
+            union_token: Union { span, .. },
+            ..
+        }) => Err(err!(
+            *span,
+            "`FromSqlRow` may only be derived for `struct`s"
+        )),
+    }
+}
+
+fn extract_properties(data: &DataStruct) -> Result<Vec<Property>> {
+    let mut props = Vec::new();
+
+    for (i, field) in data.fields.iter().enumerate() {
+        let attrs = FieldAttributes::from_attrs(&field.attrs)?;
+
+        let index = match &field.ident {
+            None => Index::Position,
+            Some(_) if attrs.flatten => Index::Flatten,
+            Some(name) => {
+                if let Some(name) = attrs.rename.clone() {
+                    Index::Name(name)
+                } else {
+                    Index::Name(name.to_string())
+                }
+            }
+        };
+
+        let ident = field
+            .ident
+            .clone()
+            .unwrap_or_else(|| Ident::new(&format!("column_{}", i), Span::call_site()));
+
+        props.push(Property {
+            ident,
+            ty: field.ty.clone(),
+            attrs,
+            index,
+            span: field.span(),
+        });
+    }
+
+    Ok(props)
+}
+
+fn field_initializers(props: &[Property], row: &Ident) -> (TokenStream, Vec<Ident>) {
+    let mut initializers = Vec::new();
+    let mut idents = Vec::new();
+
+    for (i, prop) in props.iter().enumerate() {
+        let ident = &prop.ident;
+        let ty = &prop.ty;
+        let lib = lib!();
+
+        let getter = match &prop.index {
+            Index::Position => quote! {
+                #lib::extract::Row::try_get(#row, #i)?
+            },
+            Index::Name(name) => quote! {
+                #lib::extract::Row::try_get(#row, #name)?
+            },
+            Index::Flatten => quote! {
+                <#ty as #lib::FromSqlRow>::from_row(#row)?
+            },
+        };
+
+        let initializer = quote! {
+            let #ident: #ty = #getter;
+        };
+
+        idents.push(ident.clone());
+        initializers.push(initializer);
+    }
+
+    let initializers = quote! {
+        #(#initializers)*
+    };
+
+    (initializers, idents)
+}
+
+fn count_columns(props: &[Property]) -> TokenStream {
+    let mut external = Vec::new();
+    let mut fields: usize = 0;
+
+    for prop in props {
+        match prop.index {
+            Index::Position | Index::Name(_) => fields += 1,
+            Index::Flatten => {
+                let ty = &prop.ty;
+                let lib = lib!();
+                let count = quote! { <#ty as #lib::FromSqlRow>::COLUMN_COUNT };
+                external.push(count);
+            }
+        }
+    }
+
+    quote! { #fields #(+ #external)* }
 }
