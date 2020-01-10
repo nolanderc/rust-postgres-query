@@ -97,9 +97,18 @@ let books: Vec<Book> = query!(
     .await?;
 ```
 
-We have to split the row into parts by specifying that the first occurrence of
-`id` is part of the book and the second `id` part of the author. The rest is
-done for you.
+Notice the `#[row(split = "id")]` attributes on the fields in `Book`. In order
+to extract values correctly we have to first split the row into smaller
+segments. We do this by by specifying that the first occurrence of `id` is part
+of the book and the second `id` part of the author. The rest is done for you.
+
+The splits/segments would look like this:
+
+```
+Splits:   id                id
+Columns:  id, title, genre, id, name, birthyear
+Segments: +-----Book-----+  +-----Author------+
+```
 
 If we wanted to reuse an already existing `Book` we could just as easily do
 the following:
