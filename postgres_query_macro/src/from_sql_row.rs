@@ -47,8 +47,8 @@ pub fn derive(input: DeriveInput) -> TokenStream {
     quote! {
         impl #lib::FromSqlRow for #ident {
             fn from_row<R>(row: &R) -> Result<Self, #lib::extract::Error>
-            where 
-                R: #lib::extract::Row 
+            where
+                R: #lib::extract::Row
             {
                 #getters
                 Ok(#constructor)

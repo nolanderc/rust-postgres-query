@@ -21,6 +21,5 @@ macro_rules! is_match {
             $pattern => true,
             _ => false,
         }
-    }
+    };
 }
-
