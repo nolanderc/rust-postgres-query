@@ -46,7 +46,7 @@ for person in people {
 ## Extractors
 
 This crate allows you to extract the result of queries simply by tagging a
-struct with the `#[derive(FromSqlRow)]` atttribute:
+struct with the `#[derive(FromSqlRow)]` attribute:
 
 ```rust
 #[derive(FromSqlRow)]
@@ -64,9 +64,9 @@ let books: Vec<Book> = query!("SELECT * FROM books")
 
 ## Multi-mapping
 
-This crate also enables you to extract structures from rows that contain other
-structures. This can be useful when you are joining two tables. Here we store
-the `Author` inside of the `Book`:
+You may also extract multiple structures from a single row. This can be useful
+when you are joining two tables. As a motivating example, we can store an
+`Author` instance inside a `Book` instance, which can be easier to work with:
 
 ```rust
 #[derive(FromSqlRow)]
@@ -97,7 +97,7 @@ let books: Vec<Book> = query!(
     .await?;
 ```
 
-We hove to split the row into parts by specifying that the first occurence of
+We have to split the row into parts by specifying that the first occurrence of
 `id` is part of the book and the second `id` part of the author. The rest is
 done for you.
 
