@@ -2,6 +2,7 @@
 # postgres-query
 
 [![Crates.io](https://img.shields.io/crates/v/postgres_query)](https://crates.io/crates/postgres-query)
+[![Build Status](https://travis-ci.org/nolanderc/rust-postgres-query.svg?branch=master)](https://travis-ci.org/nolanderc/rust-postgres-query)
 [![License](https://img.shields.io/crates/l/postgres_query)](#license)
 [![Minimum Rust Version](https://img.shields.io/badge/rustc-1.40%2B-orange)](https://www.rust-lang.org/)
 [![Documentation](https://docs.rs/postgres_query/badge.svg)](https://docs.rs/postgres_query)
