@@ -66,6 +66,51 @@
 //! );
 //! ```
 //!
+//!
+//! ## Dynamic Queries
+//!
+//! If necessary, queries may be constructed from `&str`s at runtime instead of the usual
+//! compile-time string literals expected by the `query!` macro. This is achieved by using the
+//! [`query_dyn!`] macro instead. In addition to dynamic queries, parameter bindings may also be
+//! dynamically: 
+//!
+//! ```
+//! # use postgres_query::*;
+//! let mut sql = "SELECT * FROM people WHERE name = $name".to_string();
+//! let mut bindings = Vec::new();
+//!
+//! // Add a filter at runtime
+//! sql += " AND age > $min_age";
+//! bindings.push(("min_age", &42 as Parameter));
+//!
+//! let query: Result<Query> = query_dyn!(
+//!     &sql,
+//!     name = "John",
+//!     ..bindings,
+//! );
+//! ```
+//!
+//! Using dynamic queries does introduce some errors that cannot be caught at runtime: such as some
+//! parameters in the query not having a matching binding. Because of this the value returned by the
+//! [`query_dyn!`] macro is not a `Query` but a `Result<Query>` which carries an error you must
+//! handle:
+//!
+//! ```
+//! # use postgres_query::*;
+//! let mut sql = "SELECT * FROM people".to_string();
+//! sql += " WHERE age <= $max_age AND name = $name";
+//!
+//! let query: Result<Query> = query_dyn!(
+//!     &sql,
+//!     name = "John",
+//!     // Forgot to bind the parameter `max_age`. 
+//!     // Will result in an error.
+//! );
+//!
+//! assert!(query.is_err());
+//! ```
+//! 
+//!
 //! # Data Extraction
 //!
 //! In addition to helping you define new queries this crate provides the [`FromSqlRow`] trait which
@@ -210,7 +255,8 @@
 //! ```
 //!
 //! [`Query`]: struct.Query.html
-//! [`query!`]: macro.Query.html
+//! [`query!`]: macro.query.html
+//! [`query_dyn!`]: macro.query_dyn.html
 //! [`FromSqlRow`]: extract/trait.FromSqlRow.html
 //! [`derive(FromSqlRow)`]: derive.FromSqlRow.html
 //! [`Caching`]: client/struct.Caching.html
