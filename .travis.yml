@@ -2,6 +2,7 @@ services:
   - postgresql
 before_script:
 - psql -c 'create user postgres_query_test;' -U postgres
+- psql -c 'create database postgres_query_test;' -U postgres
 language: rust
 rust:
   - stable
