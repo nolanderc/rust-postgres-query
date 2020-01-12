@@ -1,5 +1,5 @@
 use super::attrs::Attr;
-use super::{field_initializers, Index, PartitionKind, Property};
+use super::{field_initializers, Index, Local, PartitionKind, Property};
 use proc_macro2::{Span, TokenStream};
 use quote::*;
 use std::mem;
@@ -18,7 +18,7 @@ enum Split {
 pub(super) fn partition_initializers(
     props: Vec<Property>,
     kind: Attr<PartitionKind>,
-) -> Result<(TokenStream, Vec<Ident>)> {
+) -> Result<(TokenStream, Vec<Local>)> {
     match kind.value {
         PartitionKind::Exact => {
             let partitions = exact::partition(props)?;
@@ -106,23 +106,23 @@ mod exact {
         Ok(partitions)
     }
 
-    pub(super) fn initializers(partitions: Vec<ExactPartition>) -> (TokenStream, Vec<Ident>) {
+    pub(super) fn initializers(partitions: Vec<ExactPartition>) -> (TokenStream, Vec<Local>) {
         let mut getters = Vec::new();
         let mut locals = Vec::new();
 
-        getters.push(quote! { let begin = 0; });
+        let mut previous_end = Ident::new("__begin", Span::call_site());
 
-        let mut previous_end = Ident::new("begin", Span::call_site());
+        getters.push(quote! { let #previous_end = 0; });
 
         for (i, partition) in partitions.into_iter().enumerate() {
-            let end = Ident::new(&format!("end_{}", i), Span::call_site());
-            let current = Ident::new(&format!("slice_{}", i), Span::call_site());
+            let end = Ident::new(&format!("__end_{}", i), Span::call_site());
+            let current = Ident::new(&format!("__slice_{}", i), Span::call_site());
             let len = partition.len;
 
             let lib = lib!();
             let advance = quote! {
                 let #end = #previous_end + #len;
-                let #current = #lib::extract::Row::slice(row, #previous_end..#end)?;
+                let #current = #lib::extract::Row::slice(__row, #previous_end..#end)?;
                 let #current = &#current;
             };
 
@@ -177,7 +177,7 @@ mod split {
         splits
     }
 
-    pub(super) fn initializers(layout: Vec<Split>) -> (TokenStream, Vec<Ident>) {
+    pub(super) fn initializers(layout: Vec<Split>) -> (TokenStream, Vec<Local>) {
         let mut fragments = Vec::new();
         let mut locals = Vec::new();
 
@@ -186,20 +186,20 @@ mod split {
             _ => None,
         });
 
-        let partition_ident = |i| Ident::new(&format!("partition_{}", i), Span::call_site());
+        let partition_ident = |i| Ident::new(&format!("__partition_{}", i), Span::call_site());
         let first_partition = partition_ident(0);
 
         let lib = lib!();
         let row_trait = quote! { #lib::extract::Row };
 
         fragments.push(quote! {
-            let columns = #row_trait::columns(row);
+            let columns = #row_trait::columns(__row);
             let splits: &[&'static str] = &[#(#splits),*];
             let mut splits = #lib::extract::split_columns_many(columns, &splits);
         });
 
         let next_partition = quote! {
-            #row_trait::slice(row, splits.next().unwrap()?)?
+            #row_trait::slice(__row, splits.next().unwrap()?)?
         };
 
         let advance = |partition: &Ident| {
