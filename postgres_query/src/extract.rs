@@ -1,7 +1,9 @@
 //! Extract typed values from rows.
 
 use postgres_types::FromSql;
+use std::collections::{BTreeSet, HashSet};
 use std::fmt::{Display, Write};
+use std::hash::Hash;
 use std::iter;
 use std::ops::Range;
 use thiserror::Error;
@@ -156,6 +158,44 @@ pub trait FromSqlRow: Sized {
         R: Row,
     {
         rows.iter().map(Self::from_row).collect()
+    }
+}
+
+/// For collections that can be built from single elements.
+///
+/// Used by `#[derive(FromSqlRow)]` when a field is tagged with the attribute `#[row(merge)]`.
+pub trait Merge {
+    /// The type of item being merged.
+    type Item;
+
+    /// Insert one item into this collection.
+    fn insert(&mut self, item: Self::Item);
+}
+
+impl<T> Merge for Vec<T> {
+    type Item = T;
+    fn insert(&mut self, item: T) {
+        self.push(item)
+    }
+}
+
+impl<T> Merge for HashSet<T>
+where
+    T: Hash + Eq,
+{
+    type Item = T;
+    fn insert(&mut self, item: T) {
+        HashSet::insert(self, item);
+    }
+}
+
+impl<T> Merge for BTreeSet<T>
+where
+    T: Ord,
+{
+    type Item = T;
+    fn insert(&mut self, item: T) {
+        BTreeSet::insert(self, item);
     }
 }
 
