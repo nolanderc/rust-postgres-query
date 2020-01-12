@@ -4,9 +4,11 @@ use postgres_types::FromSql;
 use std::collections::{BTreeSet, HashSet};
 use std::fmt::{Display, Write};
 use std::hash::Hash;
+use std::error::Error as StdError;
 use std::iter;
 use std::ops::Range;
 use thiserror::Error;
+use postgres_types::WasNull;
 use tokio_postgres::{error::Error as SqlError, row::RowIndex, Column};
 
 /// An error that can occur while extracting values from a row.
@@ -44,6 +46,27 @@ impl Error {
     {
         Error::Custom {
             msg: msg.to_string(),
+        }
+    }
+
+    /// A soft error is an error that can be converted into an `Option::None`.
+    fn is_soft(&self) -> bool {
+        match self {
+            Error::Sql(sql) => {
+                let mut error: &dyn StdError = sql;
+                loop {
+                    if let Some(WasNull) = error.downcast_ref() {
+                        break true;
+                    }
+
+                    match error.source() {
+                        Some(source) => error = source,
+                        None => break false,
+                    }
+                }
+            }
+
+            _ => false,
         }
     }
 }
@@ -450,7 +473,8 @@ mod from_row_sql_impls {
         {
             match T::from_row(row) {
                 Ok(value) => Ok(Some(value)),
-                Err(_) => Ok(None),
+                Err(error) if error.is_soft() => Ok(None),
+                Err(error) => Err(error),
             }
         }
     }

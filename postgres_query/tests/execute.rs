@@ -778,3 +778,36 @@ async fn optional_flatten() -> Result {
 
     Ok(())
 }
+
+#[tokio::test]
+async fn optional_flatten_invalid_type() -> Result {
+    let mut client = establish().await?;
+    let tx = client.transaction().await?;
+
+    #[derive(FromSqlRow, Clone)]
+    #[row(split)]
+    struct Family {
+        #[row(flatten, split = "id")]
+        child: Person,
+        #[row(flatten, split = "id")]
+        father: Option<Person>,
+    }
+
+    #[derive(FromSqlRow, Clone)]
+    struct Person {
+        id: i32,
+        name: String,
+    }
+
+    let families = query!(
+        "SELECT 1 as id, 'Luke Skywalker' as name, NULL as id, 'Darth Vader' as name
+        UNION ALL SELECT 2, 'Darth Vader', 'a number', 'The Force'"
+    )
+    .fetch::<Family, _>(&tx)
+    .await;
+
+    // 'a number' is not of the correct type, so this should fail 
+    assert!(families.is_err());
+
+    Ok(())
+}
