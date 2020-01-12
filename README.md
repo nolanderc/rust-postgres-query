@@ -136,10 +136,6 @@ author may write many books, so that is a one-to-many relationship. We can write
 an extractor for that case as well:
 
 ```rust
-# use postgres_query::*;
-# use tokio_postgres::Client;
-# async fn foo() -> Result<()> {
-# let client: Client = unimplemented!();
 #[derive(FromSqlRow)]
 #[row(split, group)]
 struct Author {
@@ -166,8 +162,6 @@ let authors: Vec<Author> = query!(
     )
     .fetch(&client)
     .await?;
-# Ok(())
-# }
 ```
 
 
