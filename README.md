@@ -126,6 +126,51 @@ struct Listings {
 ```
 
 
+### One-to-many Relationships
+
+In the previous examples we had a `Book` that contained an `Author`. This is
+what is called a many-to-one relationship, since one book only has one author,
+but many books may share the same author (or so we assume anyway). What if you
+instead had `Author` an author that contained many `Book`s? We know that one
+author may write many books, so that is a one-to-many relationship. We can write
+an extractor for that case as well:
+
+```rust
+# use postgres_query::*;
+# use tokio_postgres::Client;
+# async fn foo() -> Result<()> {
+# let client: Client = unimplemented!();
+#[derive(FromSqlRow)]
+#[row(split, group)]
+struct Author {
+    #[row(split = "id", key)]
+    id: i32,
+    name: String,
+    birthyear: i32,
+
+    #[row(split = "id", merge)]
+    books: Vec<Book>,
+}
+
+#[derive(FromSqlRow)]
+struct Book {
+    id: i32,
+    title: String,
+    genre: String,
+}
+
+let authors: Vec<Author> = query!(
+        "SELECT authors.*, books.*
+         INNER JOIN books ON books.author = authors.id
+         GROUP BY authors.id"
+    )
+    .fetch(&client)
+    .await?;
+# Ok(())
+# }
+```
+
+
 ## Dynamic queries
 
 Queries may be constructed from either a string literal, in which case parameter

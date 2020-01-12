@@ -6,6 +6,7 @@ use syn::{spanned::Spanned, Attribute, Lit, Meta, NestedMeta, Result};
 
 pub struct ContainerAttributes {
     pub partition: Option<Attr<PartitionKind>>,
+    pub merge: Option<Attr<MergeKind>>,
 }
 
 pub struct FieldAttributes {
@@ -13,6 +14,8 @@ pub struct FieldAttributes {
     pub rename: Option<String>,
     pub splits: Vec<Attr<String>>,
     pub stride: Option<Attr<usize>>,
+    pub key: Option<Attr<()>>,
+    pub merge: Option<Attr<()>>,
 }
 
 #[derive(Copy, Clone)]
@@ -21,9 +24,16 @@ pub struct Attr<T> {
     pub value: T,
 }
 
+#[derive(Copy, Clone)]
 pub enum PartitionKind {
     Exact,
     Split,
+}
+
+#[derive(Copy, Clone)]
+pub enum MergeKind {
+    Group,
+    Hash,
 }
 
 impl<T> Attr<T> {
@@ -98,6 +108,36 @@ macro_rules! err_expected_variant {
     (@format: $name:literal, List) => { concat!("a list (`", $name, "(...)`)") };
 }
 
+macro_rules! match_item {
+    (
+        ($item:expr) {
+            $(
+                $ident:literal => {
+                    $(
+                        $meta:ident ($binding:pat) => $expr:expr
+                    ),+ $(,)?
+                }
+            ),* $(,)?
+        }
+    ) => {
+        match $item {
+            $(
+                item if item.path().is_ident($ident) => match item {
+                    $(
+                        $meta ($binding) => $expr,
+                    )+
+                    _ => return Err(err_expected_variant!(
+                        item,
+                        $ident,
+                        [$($meta),+]
+                    )),
+                },
+            )*
+            item => return Err(err!(item, "unknown attribute")),
+        }
+    };
+}
+
 impl ContainerAttributes {
     pub fn from_attrs<'a>(
         attrs: impl IntoIterator<Item = &'a Attribute>,
@@ -105,29 +145,40 @@ impl ContainerAttributes {
         let items = attribute_items("row", attrs)?;
 
         let mut partition = None;
+        let mut merge = None;
 
-        for item in items {
+        for item in &items {
             use Meta::Path;
-            match &item {
-                item if item.path().is_ident("exact") => match item {
+
+            match_item!((item) {
+                "exact" => {
                     Path(_) => {
                         let kind = Attr::new(item, PartitionKind::Exact);
                         set_or_err!(partition, kind, err_multiple_partition!(item))?;
                     }
-                    _ => return Err(err_expected_variant!(item, "exact", [Path])),
                 },
-                item if item.path().is_ident("split") => match item {
+                "split" => {
                     Path(_) => {
                         let kind = Attr::new(item, PartitionKind::Split);
                         set_or_err!(partition, kind, err_multiple_partition!(item))?;
                     }
-                    _ => return Err(err_expected_variant!(item, "split", [Path])),
                 },
-                item => return Err(err!(item, "unknown attribute",)),
-            }
+                "group" => {
+                    Path(_) => {
+                        let kind = Attr::new(item, MergeKind::Group);
+                        set_or_err!(merge, kind, err_multiple_partition!(item))?;
+                    }
+                },
+                "hash" => {
+                    Path(_) => {
+                        let kind = Attr::new(item, MergeKind::Hash);
+                        set_or_err!(merge, kind, err_multiple_partition!(item))?;
+                    }
+                },
+            })
         }
 
-        let container = ContainerAttributes { partition };
+        let container = ContainerAttributes { partition, merge };
 
         Ok(container)
     }
@@ -143,44 +194,50 @@ impl FieldAttributes {
         let mut rename = None;
         let mut splits = Vec::new();
         let mut stride = None;
+        let mut key = None;
+        let mut merge = None;
 
-        for item in items {
+        for item in &items {
             use Meta::{NameValue, Path};
-            match &item {
-                item if item.path().is_ident("flatten") => match item {
+
+            match_item!((item) {
+                "flatten" => {
                     Path(_) => {
                         set_or_err!(flatten, true, err_duplicate_attribute!(item, "flatten"))?
                     }
-                    _ => return Err(err_expected_variant!(item, "flatten", [Path])),
                 },
-
-                item if item.path().is_ident("rename") => match item {
+                "rename" => {
                     NameValue(pair) => {
                         let text = lit_string(&pair.lit)?;
                         set_or_err!(rename, text, err_duplicate_attribute!(item, "rename"))?;
                     }
-                    _ => return Err(err_expected_variant!(item, "rename", [NameValue])),
                 },
-
-                item if item.path().is_ident("split") => match item {
+                "split" => {
                     NameValue(pair) => {
                         let text = lit_string(&pair.lit)?;
                         splits.push(Attr::new(pair, text));
                     }
-                    _ => return Err(err_expected_variant!(item, "split", [NameValue])),
                 },
-
-                item if item.path().is_ident("stride") => match item {
+                "stride" => {
                     NameValue(pair) => {
                         let step = lit_int(&pair.lit)?;
                         let step = Attr::new(pair, step);
                         set_or_err!(stride, step, err_duplicate_attribute!(item, "stride"))?
                     }
-                    _ => return Err(err_expected_variant!(item, "split", [NameValue])),
                 },
-
-                item => return Err(err!(item, "unknown attribute")),
-            }
+                "key" => {
+                    Path(_) => {
+                        let attr = Attr::new(item, ());
+                        set_or_err!(key, attr, err_duplicate_attribute!(item, "key"))?
+                    }
+                },
+                "merge" => {
+                    Path(_) => {
+                        let attr = Attr::new(item, ());
+                        set_or_err!(merge, attr, err_duplicate_attribute!(item, "merge"))?
+                    }
+                },
+            })
         }
 
         let field = FieldAttributes {
@@ -188,6 +245,8 @@ impl FieldAttributes {
             rename,
             splits,
             stride,
+            key,
+            merge,
         };
 
         Ok(field)
