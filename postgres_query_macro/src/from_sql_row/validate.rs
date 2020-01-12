@@ -9,6 +9,7 @@ pub(super) fn validate_properties(
     check_stride_in_non_exact_container(container, props)?;
 
     check_merging_container_attributes(container, props)?;
+    check_not_key_and_merge(props)?;
 
     Ok(())
 }
@@ -75,12 +76,12 @@ fn check_merging_container_attributes(
         if !has_key {
             Err(err!(
                 merge.span,
-                "You need to specify atleast one of the container's fields to be a key: `#[row(key)]`"
+                "You need to specify at least one of the container's fields to be a key: `#[row(key)]`"
             ))
         } else if !has_merge {
             Err(err!(
                 merge.span,
-                "You need to specify atleast one of the container's fields to be the merged field: `#[row(merge)]`"
+                "You need to specify at least one of the container's fields to be the merged field: `#[row(merge)]`"
             ))
         } else {
             Ok(())
@@ -104,4 +105,17 @@ fn check_merging_container_attributes(
             )),
         }
     }
+}
+
+fn check_not_key_and_merge(props: &[Property]) -> Result<()> {
+    props
+        .iter()
+        .map(|prop| match (prop.attrs.key, prop.attrs.merge) {
+            (Some(key), Some(merge)) => Err(err!(
+                key.span.join(merge.span).unwrap_or(key.span),
+                "You cannot specify both `#[row(key)]` and `#[row(merge)]` on the same field"
+            )),
+            _ => Ok(()),
+        })
+        .collect()
 }

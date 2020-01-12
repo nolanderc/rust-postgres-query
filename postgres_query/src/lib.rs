@@ -218,9 +218,51 @@
 //!     author: Author,
 //! }
 //! ```
+//! 
+//! In the previous examples we had the relation `Book` -> `Author`. This is what is called a
+//! many-to-one relationship, since one book only has one author, but many books may have the same
+//! author (or so we assume anyway). What if you instead had `Author` -> `Book`? We know that one
+//! author may write many books, so that is a one-to-many relationship. We can write an extractor
+//! for that case as well:
 //!
-//! See the section on [attributes](./derive.FromSqlRow.html#attributes) for more advanced
-//! partitioning.
+//! ```
+//! # use postgres_query::*;
+//! # use tokio_postgres::Client;
+//! # async fn foo() -> Result<()> {
+//! # let client: Client = unimplemented!();
+//! #[derive(FromSqlRow)]
+//! #[row(split, group)]
+//! struct Author {
+//!     #[row(split = "id", key)]
+//!     id: i32,
+//!     name: String,
+//!     birthyear: i32,
+//!
+//!     #[row(split = "id", merge)]
+//!     books: Vec<Book>,
+//! }
+//!
+//! #[derive(FromSqlRow)]
+//! struct Book {
+//!     id: i32,
+//!     title: String,
+//!     release_date: String,
+//!     genre: String,
+//! }
+//!
+//! let authors: Vec<Author> = query!(
+//!         "SELECT authors.*, books.*
+//!          INNER JOIN books ON books.author = authors.id
+//!          GROUP BY authors.id"
+//!     )
+//!     .fetch(&client)
+//!     .await?;
+//! # Ok(())
+//! # }
+//! ```
+//!
+//! See the section on [attributes](./derive.FromSqlRow.html#attributes) for a more advanced
+//! in-depth explanation of multi-mapping.
 //!
 //!
 //! # Caching queries
@@ -305,6 +347,8 @@ pub use crate::extract::FromSqlRow;
 ///
 /// - [`#[row(exact)]`](#rowexact)
 /// - [`#[row(split)]`](#rowsplit)
+/// - [`#[row(group)]`](#rowgroup)
+/// - [`#[row(hash)]`](#rowhash)
 ///
 /// and those which are placed on the container's fields:
 ///
@@ -312,6 +356,8 @@ pub use crate::extract::FromSqlRow;
 /// - [`#[row(flatten)]`](#rowflatten)
 /// - [`#[row(stride = N)]`](#rowstride--n)
 /// - [`#[row(split = "...")]`](#rowsplit--)
+/// - [`#[row(key)]`](#rowkey)
+/// - [`#[row(merge)]`](#rowmerge)
 ///
 ///
 /// ## Container attributes
@@ -404,6 +450,103 @@ pub use crate::extract::FromSqlRow;
 /// # }
 /// ```
 ///
+///
+/// ### `#[row(group)]`
+///
+/// Enables one-to-many mapping for the container. One-to-many mapping requires that at least one
+/// field has the `#[row(key)]` attribute and that one other field has the `#[row(merge)]` attribute.
+///
+/// When extracting values from multiple rows, any two **adjacent** rows that are identical on their
+/// fields marked with `#[row(key)]` will have their fields tagged with `#[row(merge)]` merged. This
+/// means that in order to get the expected relation back, you may need to include a `GROUP BY`
+/// statement in your SQL query, hence the name `group`.
+///
+/// ```
+/// # use postgres_query::*;
+/// # use tokio_postgres::Client;
+/// # async fn foo() -> Result<()> {
+/// # let client: Client = unimplemented!();
+/// #[derive(Debug, FromSqlRow)]
+/// #[row(group)]
+/// struct Author {
+///     #[row(key)]
+///     name: String,
+///
+///     #[row(merge)]
+///     books: Vec<Book>,
+/// }
+///
+/// #[derive(Debug, FromSqlRow)]
+/// struct Book {
+///     title: String,
+/// }
+///
+/// let authors = query!(
+///         "SELECT 'J.R.R. Tolkien' as name, 'The Fellowship of the Ring' as title
+///          UNION ALL SELECT 'J.R.R. Tolkien', 'The Two Towers'
+///          UNION ALL SELECT 'Andrzej Sapkowski', 'The Last Wish'
+///          UNION ALL SELECT 'J.R.R. Tolkien', 'Return of the King'")
+///     .fetch::<Author, _>(&client)
+///     .await?;
+///
+/// assert_eq!(authors[0].name, "J.R.R. Tolkien");
+/// assert_eq!(authors[0].books[0].title, "The Fellowship of the Ring");
+/// assert_eq!(authors[0].books[1].title, "The Two Towers");
+///
+/// assert_eq!(authors[1].name, "Andrzej Sapkowski");
+/// assert_eq!(authors[1].books[0].title, "The Last Wish");
+///
+/// assert_eq!(authors[2].name, "J.R.R. Tolkien");
+/// assert_eq!(authors[2].books[0].title, "Return of the King");
+/// # Ok(())
+/// # }
+/// ```
+///
+///
+/// ### `#[row(hash)]`
+///
+/// Like `#[row(group)]`, but all previous rows are considered when merging. This is accomplished by
+/// using a `HashMap`, hence the name. This implies that all keys have to implement the `Hash` and
+/// `Eq` traits:
+///
+/// ```
+/// # use postgres_query::*;
+/// # use tokio_postgres::Client;
+/// # async fn foo() -> Result<()> {
+/// # let client: Client = unimplemented!();
+/// #[derive(Debug, FromSqlRow)]
+/// #[row(hash)]
+/// struct Author {
+///     #[row(key)]
+///     name: String,
+///
+///     #[row(merge)]
+///     books: Vec<Book>,
+/// }
+///
+/// #[derive(Debug, FromSqlRow)]
+/// struct Book {
+///     title: String,
+/// }
+///
+/// let authors = query!(
+///         "SELECT 'J.R.R. Tolkien' as name, 'The Fellowship of the Ring' as title
+///          UNION ALL SELECT 'J.R.R. Tolkien', 'The Two Towers'
+///          UNION ALL SELECT 'Andrzej Sapkowski', 'The Last Wish'
+///          UNION ALL SELECT 'J.R.R. Tolkien', 'Return of the King'")
+///     .fetch::<Author, _>(&client)
+///     .await?;
+///
+/// assert_eq!(authors[0].name, "J.R.R. Tolkien");
+/// assert_eq!(authors[0].books[0].title, "The Fellowship of the Ring");
+/// assert_eq!(authors[0].books[1].title, "The Two Towers");
+/// assert_eq!(authors[0].books[2].title, "Return of the King");
+///
+/// assert_eq!(authors[1].name, "Andrzej Sapkowski");
+/// assert_eq!(authors[1].books[0].title, "The Last Wish");
+/// # Ok(())
+/// # }
+/// ```
 ///
 /// ## Field attributes
 ///
@@ -574,6 +717,25 @@ pub use crate::extract::FromSqlRow;
 ///     child: Person,
 /// }
 /// ```
+///
+///
+/// ### `#[row(key)]`
+///
+/// Specifies this field to be a `key` field. `key` fields are compared against each other when
+/// extracting values from multiple rows. Rows are merged if the key fields in each row are
+/// identical. You may have multiple `key` fields within a single container, but none of them may
+/// have the `#[row(merge)]` attribute. Multiple `key` fields will be treated as a tuple in
+/// comparisons.
+///
+///
+/// ### `#[row(merge)]`
+///
+/// Specifies this field to be a `merge` field. This requires that the field's type implements the
+/// [`Merge`] trait. When two rows have been deemed to be equal based on the `key` fields, the
+/// corresponding `merge` fields in those rows will be merged. You may specify multiple `merge`
+/// fields within one container, but none of them may have the `#[row(key)]` attribute.
+///
+/// [`Merge`]: extract/trait.Merge.html
 pub use postgres_query_macro::FromSqlRow;
 
 /// Constructs a new query at compile-time. See also `query_dyn!`.
