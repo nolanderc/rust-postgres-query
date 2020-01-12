@@ -546,7 +546,7 @@ async fn multi_mapping_many_to_one() -> Result {
         books: Vec<Book>,
     }
 
-    #[derive(FromSqlRow)]
+    #[derive(Debug, FromSqlRow)]
     struct Book {
         title: String,
     }
@@ -558,7 +558,7 @@ async fn multi_mapping_many_to_one() -> Result {
         UNION ALL 
         SELECT 1 as id, 'J.R.R. Tolkien' as name, 'The Two Towers' as title
         UNION ALL 
-        SELECT 1 as id, 'Andrzej Sapkowski' as name, 'The Last Wish' as title
+        SELECT 2 as id, 'Andrzej Sapkowski' as name, 'The Last Wish' as title
         "
     )
     .fetch::<Author, _>(&tx)
@@ -572,7 +572,7 @@ async fn multi_mapping_many_to_one() -> Result {
     assert_eq!(tolkien.id, 1);
     assert_eq!(tolkien.name, "J.R.R. Tolkien");
     assert_eq!(tolkien.books.len(), 2);
-    assert_eq!(tolkien.books[0].title, "The Followship of the Ring");
+    assert_eq!(tolkien.books[0].title, "The Fellowship of the Ring");
     assert_eq!(tolkien.books[1].title, "The Two Towers");
 
     assert_eq!(andrzej.id, 2);
