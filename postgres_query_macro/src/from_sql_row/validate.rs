@@ -8,7 +8,7 @@ pub(super) fn validate_properties(
     check_split_in_non_split_container(container, props)?;
     check_stride_in_non_exact_container(container, props)?;
 
-    check_non_merging_container_attributes(container, props)?;
+    check_merging_container_attributes(container, props)?;
 
     Ok(())
 }
@@ -64,14 +64,27 @@ fn check_stride_in_non_exact_container(
     }
 }
 
-fn check_non_merging_container_attributes(
+fn check_merging_container_attributes(
     container: &ContainerAttributes,
     props: &[Property],
 ) -> Result<()> {
-    let is_merging = container.merge.is_some();
+    if let Some(merge) = container.merge.as_ref() {
+        let has_key = props.iter().any(|prop| prop.attrs.key.is_some());
+        let has_merge = props.iter().any(|prop| prop.attrs.merge.is_some());
 
-    if is_merging {
-        Ok(())
+        if !has_key {
+            Err(err!(
+                merge.span,
+                "You need to specify atleast one of the container's fields to be a key: `#[row(key)]`"
+            ))
+        } else if !has_merge {
+            Err(err!(
+                merge.span,
+                "You need to specify atleast one of the container's fields to be the merged field: `#[row(merge)]`"
+            ))
+        } else {
+            Ok(())
+        }
     } else {
         let key = props.iter().find(|prop| prop.attrs.key.is_some());
         match key {
