@@ -4,9 +4,11 @@ use postgres_types::FromSql;
 use std::collections::{BTreeSet, HashSet};
 use std::fmt::{Display, Write};
 use std::hash::Hash;
+use std::error::Error as StdError;
 use std::iter;
 use std::ops::Range;
 use thiserror::Error;
+use postgres_types::WasNull;
 use tokio_postgres::{error::Error as SqlError, row::RowIndex, Column};
 
 /// An error that can occur while extracting values from a row.
@@ -44,6 +46,27 @@ impl Error {
     {
         Error::Custom {
             msg: msg.to_string(),
+        }
+    }
+
+    /// A soft error is an error that can be converted into an `Option::None`.
+    fn is_soft(&self) -> bool {
+        match self {
+            Error::Sql(sql) => {
+                let mut error: &dyn StdError = sql;
+                loop {
+                    if let Some(WasNull) = error.downcast_ref() {
+                        break true;
+                    }
+
+                    match error.source() {
+                        Some(source) => error = source,
+                        None => break false,
+                    }
+                }
+            }
+
+            _ => false,
         }
     }
 }
@@ -379,58 +402,124 @@ fn format_columns(columns: &[Column]) -> String {
     total
 }
 
-macro_rules! impl_from_row_for_tuple {
-    (($($elem:ident),+)) => {
-        impl<$($elem),+> FromSqlRow for ($($elem,)+)
-            where $($elem: for<'a> FromSql<'a> + std::fmt::Display),+
-        {
-            const COLUMN_COUNT: usize = impl_from_row_for_tuple!(@count ($($elem),*));
+mod from_row_sql_impls {
+    use super::*;
 
-            fn from_row<R>(row: &R) -> Result<Self, Error>
-            where R: Row {
-                if row.len() != Self::COLUMN_COUNT {
-                    Err(Error::ColumnCount {
-                        expected: Self::COLUMN_COUNT,
-                        found: row.len(),
-                    })
-                } else {
-                    let result = (
-                        $(
-                            row.try_get::<usize, $elem>(
-                                impl_from_row_for_tuple!(@index $elem)
-                            )?,
-                        )+
-                    );
+    use std::rc::Rc;
+    use std::sync::Arc;
 
-                    Ok(result)
+    macro_rules! impl_from_row_for_tuple {
+        (($($elem:ident),+)) => {
+            impl<$($elem),+> FromSqlRow for ($($elem,)+)
+                where $($elem: for<'a> FromSql<'a> + std::fmt::Display),+
+                {
+                    const COLUMN_COUNT: usize = impl_from_row_for_tuple!(@count ($($elem),*));
+
+                    fn from_row<R>(row: &R) -> Result<Self, Error>
+                        where R: Row {
+                            if row.len() != Self::COLUMN_COUNT {
+                                Err(Error::ColumnCount {
+                                    expected: Self::COLUMN_COUNT,
+                                    found: row.len(),
+                                })
+                            } else {
+                                let result = (
+                                    $(
+                                        row.try_get::<usize, $elem>(
+                                            impl_from_row_for_tuple!(@index $elem)
+                                        )?,
+                                    )+
+                                );
+
+                                Ok(result)
+                            }
+                        }
                 }
+        };
+
+        (@index A) => { 0 };
+        (@index B) => { 1 };
+        (@index C) => { 2 };
+        (@index D) => { 3 };
+        (@index E) => { 4 };
+        (@index F) => { 5 };
+        (@index G) => { 6 };
+        (@index H) => { 7 };
+
+        (@count ()) => { 0 };
+        (@count ($head:ident $(, $tail:ident)*)) => {{
+            1 + impl_from_row_for_tuple!(@count ($($tail),*))
+        }};
+    }
+
+    impl_from_row_for_tuple!((A));
+    impl_from_row_for_tuple!((A, B));
+    impl_from_row_for_tuple!((A, B, C));
+    impl_from_row_for_tuple!((A, B, C, D));
+    impl_from_row_for_tuple!((A, B, C, D, E));
+    impl_from_row_for_tuple!((A, B, C, D, E, F));
+    impl_from_row_for_tuple!((A, B, C, D, E, F, G));
+    impl_from_row_for_tuple!((A, B, C, D, E, F, G, H));
+
+    impl<T> FromSqlRow for Option<T>
+    where
+        T: FromSqlRow,
+    {
+        const COLUMN_COUNT: usize = T::COLUMN_COUNT;
+
+        fn from_row<R>(row: &R) -> Result<Self, Error>
+        where
+            R: Row,
+        {
+            match T::from_row(row) {
+                Ok(value) => Ok(Some(value)),
+                Err(error) if error.is_soft() => Ok(None),
+                Err(error) => Err(error),
             }
         }
-    };
+    }
 
-    (@index A) => { 0 };
-    (@index B) => { 1 };
-    (@index C) => { 2 };
-    (@index D) => { 3 };
-    (@index E) => { 4 };
-    (@index F) => { 5 };
-    (@index G) => { 6 };
-    (@index H) => { 7 };
+    impl<T, E> FromSqlRow for Result<T, E>
+    where
+        T: FromSqlRow,
+        E: From<Error>,
+    {
+        const COLUMN_COUNT: usize = T::COLUMN_COUNT;
 
-    (@count ()) => { 0 };
-    (@count ($head:ident $(, $tail:ident)*)) => {{
-        1 + impl_from_row_for_tuple!(@count ($($tail),*))
-    }};
+        fn from_row<R>(row: &R) -> Result<Self, Error>
+        where
+            R: Row,
+        {
+            match T::from_row(row) {
+                Ok(value) => Ok(Ok(value)),
+                Err(error) => Ok(Err(E::from(error))),
+            }
+        }
+    }
+
+    macro_rules! impl_from_row_for_wrapper {
+        ($wrapper:ident, $constructor:expr) => {
+            impl<T> FromSqlRow for $wrapper<T>
+            where
+                T: FromSqlRow,
+            {
+                const COLUMN_COUNT: usize = T::COLUMN_COUNT;
+
+                fn from_row<R>(row: &R) -> Result<Self, Error>
+                where
+                    R: Row,
+                {
+                    let value = T::from_row(row)?;
+                    Ok($constructor(value))
+                }
+            }
+        };
+    }
+
+    impl_from_row_for_wrapper!(Box, Box::new);
+    impl_from_row_for_wrapper!(Rc, Rc::new);
+    impl_from_row_for_wrapper!(Arc, Arc::new);
 }
-
-impl_from_row_for_tuple!((A));
-impl_from_row_for_tuple!((A, B));
-impl_from_row_for_tuple!((A, B, C));
-impl_from_row_for_tuple!((A, B, C, D));
-impl_from_row_for_tuple!((A, B, C, D, E));
-impl_from_row_for_tuple!((A, B, C, D, E, F));
-impl_from_row_for_tuple!((A, B, C, D, E, F, G));
-impl_from_row_for_tuple!((A, B, C, D, E, F, G, H));
 
 #[cfg(test)]
 mod tests {

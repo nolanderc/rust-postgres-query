@@ -736,3 +736,123 @@ async fn parameter_list() -> Result {
 
     Ok(())
 }
+
+#[tokio::test]
+async fn optional_flatten() -> Result {
+    let mut client = establish().await?;
+    let tx = client.transaction().await?;
+
+    #[derive(FromSqlRow, Clone)]
+    #[row(split)]
+    struct Family {
+        #[row(flatten, split = "id")]
+        child: Person,
+        #[row(flatten, split = "id")]
+        father: Option<Person>,
+    }
+
+    #[derive(FromSqlRow, Clone)]
+    struct Person {
+        id: i32,
+        name: String,
+    }
+
+    let families: Vec<Family> = query!(
+        "SELECT 1 as id, 'Luke Skywalker' as name, 2 as id, 'Darth Vader' as name
+        UNION ALL SELECT 2, 'Darth Vader', NULL, NULL"
+    )
+    .fetch(&tx)
+    .await?;
+
+    let luke = families[0].clone();
+    let vader = families[1].clone();
+
+    assert_eq!(luke.child.id, 1);
+    assert_eq!(luke.child.name, "Luke Skywalker");
+    assert_eq!(luke.father.as_ref().unwrap().id, 2);
+    assert_eq!(luke.father.as_ref().unwrap().name, "Darth Vader");
+
+    assert_eq!(vader.child.id, 2);
+    assert_eq!(vader.child.name, "Darth Vader");
+    assert!(vader.father.is_none());
+
+    Ok(())
+}
+
+#[tokio::test]
+async fn optional_flatten_invalid_type() -> Result {
+    let mut client = establish().await?;
+    let tx = client.transaction().await?;
+
+    #[derive(FromSqlRow, Clone)]
+    #[row(split)]
+    struct Family {
+        #[row(flatten, split = "id")]
+        child: Person,
+        #[row(flatten, split = "id")]
+        father: Option<Person>,
+    }
+
+    #[derive(FromSqlRow, Clone)]
+    struct Person {
+        id: i32,
+        name: String,
+    }
+
+    let families = query!(
+        "SELECT 1 as id, 'Luke Skywalker' as name, NULL as id, 'Darth Vader' as name
+        UNION ALL SELECT 2, 'Darth Vader', 'a number', 'The Force'"
+    )
+    .fetch::<Family, _>(&tx)
+    .await;
+
+    // 'a number' is not of the correct type, so this should fail
+    assert!(families.is_err());
+
+    Ok(())
+}
+
+#[tokio::test]
+async fn optional_flatten_nested_option() -> Result {
+    let mut client = establish().await?;
+    let tx = client.transaction().await?;
+
+    #[derive(FromSqlRow, Clone)]
+    #[row(split)]
+    struct Family {
+        #[row(flatten, split = "id")]
+        child: Person,
+        #[row(flatten, split = "id")]
+        father: Option<Person>,
+    }
+
+    #[derive(FromSqlRow, Clone)]
+    struct Person {
+        id: i32,
+        name: Option<String>,
+    }
+
+    let families: Vec<Family> = query!(
+        "SELECT 1 as id, 'Luke Skywalker' as name, 2 as id, 'Darth Vader' as name
+        UNION ALL SELECT 2, 'Darth Vader', 3, NULL"
+    )
+    .fetch(&tx)
+    .await?;
+
+    let luke = families[0].clone();
+    let vader = families[1].clone();
+
+    assert_eq!(luke.child.id, 1);
+    assert_eq!(luke.child.name.unwrap(), "Luke Skywalker");
+    let luke_father = luke.father.unwrap();
+    assert_eq!(luke_father.id, 2);
+    assert_eq!(luke_father.name, Some("Darth Vader".into()));
+
+    assert_eq!(vader.child.id, 2);
+    assert_eq!(vader.child.name.unwrap(), "Darth Vader");
+    let vader_father = vader.father.unwrap();
+    assert_eq!(vader_father.id, 3);
+    assert_eq!(vader_father.name, None);
+
+    Ok(())
+}
