@@ -129,9 +129,10 @@ struct Listings {
 
 In the previous examples we had a `Book` that contained an `Author`. This is
 what is called a many-to-one relationship, since one book only has one author,
-but many books may the same author (or so we assume anyway). What if you instead
-had `Author` -> `Book`? We know that one author may write many books, so that is
-a one-to-many relationship. We can write an extractor for that case as well:
+but many books may share the same author (or so we assume anyway). What if you
+instead had `Author` an author that contained many `Book`s? We know that one
+author may write many books, so that is a one-to-many relationship. We can write
+an extractor for that case as well:
 
 ```rust
 # use postgres_query::*;
