@@ -1,6 +1,6 @@
 [package]
 name = "postgres_query"
-version = "0.3.2"
+version = "0.3.3"
 authors = ["Christofer Nolander <christofer.nolander@gmail.com>"]
 edition = "2018"
 description = "Write and execute SQL queries with ease"
