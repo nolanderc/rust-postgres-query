@@ -1,6 +1,6 @@
 [package]
 name = "postgres_query"
-version = "0.3.1"
+version = "0.3.2"
 authors = ["Christofer Nolander <christofer.nolander@gmail.com>"]
 edition = "2018"
 description = "Write and execute SQL queries with ease"
@@ -16,7 +16,7 @@ name = "basic"
 path = "examples/basic.rs"
 
 [dependencies]
-postgres_query_macro = { version = "0.3.0", path = "../postgres_query_macro" }
+postgres_query_macro = { version = "0.3.1", path = "../postgres_query_macro" }
 proc-macro-hack = "0.5.11"
 postgres-types = "0.1.0"
 serde = "1.0.104"
