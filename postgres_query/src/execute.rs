@@ -60,7 +60,6 @@ impl<'a> Query<'a> {
         C: GenericClient + Sync,
     {
         let row = self.query_one(client).await?;
-        dbg!(&row.columns());
         let value = T::from_row(&row).map_err(Error::from)?;
         Ok(value)
     }
