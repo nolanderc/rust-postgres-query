@@ -531,6 +531,59 @@ async fn multi_mapping_stacked_splits() -> Result {
 }
 
 #[tokio::test]
+async fn multi_mapping_many_to_one() -> Result {
+    let mut client = establish().await?;
+    let tx = client.transaction().await?;
+
+    #[derive(Debug, FromSqlRow)]
+    #[row(group)]
+    struct Author {
+        #[row(key)]
+        id: i32,
+        name: String,
+
+        #[row(merge)]
+        books: Vec<Book>,
+    }
+
+    #[derive(FromSqlRow)]
+    struct Book {
+        title: String,
+    }
+
+    let authors = query!(
+        // Each line represents a partition
+        "
+        SELECT 1 as id, 'J.R.R. Tolkien' as name, 'The Fellowship of the Ring' as title
+        UNION ALL 
+        SELECT 1 as id, 'J.R.R. Tolkien' as name, 'The Two Towers' as title
+        UNION ALL 
+        SELECT 1 as id, 'Andrzej Sapkowski' as name, 'The Last Wish' as title
+        "
+    )
+    .fetch::<Author, _>(&tx)
+    .await?;
+
+    assert_eq!(authors.len(), 2);
+
+    let tolkien = &authors[0];
+    let andrzej = &authors[1];
+
+    assert_eq!(tolkien.id, 1);
+    assert_eq!(tolkien.name, "J.R.R. Tolkien");
+    assert_eq!(tolkien.books.len(), 2);
+    assert_eq!(tolkien.books[0].title, "The Followship of the Ring");
+    assert_eq!(tolkien.books[1].title, "The Two Towers");
+
+    assert_eq!(andrzej.id, 2);
+    assert_eq!(andrzej.name, "Andrzej Sapkowski");
+    assert_eq!(andrzej.books.len(), 1);
+    assert_eq!(andrzej.books[0].title, "The Last Wish");
+
+    Ok(())
+}
+
+#[tokio::test]
 async fn parameter_list() -> Result {
     let mut client = establish().await?;
     let tx = client.transaction().await?;
