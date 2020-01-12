@@ -214,10 +214,13 @@
 //!     title: String,
 //!     release_date: String,
 //!     genre: String,
+//!
 //!     #[row(flatten, split = "id")]
 //!     author: Author,
 //! }
 //! ```
+//!
+//! ### Many-to-one Relationships
 //! 
 //! In the previous examples we had a `Book` that contained an `Author`. This is what is called a
 //! many-to-one relationship, since one book only has one author, but many books may share the same
