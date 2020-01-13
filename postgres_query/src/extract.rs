@@ -1,14 +1,14 @@
 //! Extract typed values from rows.
 
 use postgres_types::FromSql;
+use postgres_types::WasNull;
 use std::collections::{BTreeSet, HashSet};
+use std::error::Error as StdError;
 use std::fmt::{Display, Write};
 use std::hash::Hash;
-use std::error::Error as StdError;
 use std::iter;
 use std::ops::Range;
 use thiserror::Error;
-use postgres_types::WasNull;
 use tokio_postgres::{error::Error as SqlError, row::RowIndex, Column};
 
 /// An error that can occur while extracting values from a row.
