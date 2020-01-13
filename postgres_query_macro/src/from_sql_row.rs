@@ -100,10 +100,17 @@ fn make_constructor(input: &DeriveInput, locals: impl IntoIterator<Item = Local>
 fn make_merge(merge: Merge, constructor: &TokenStream, getters: &TokenStream) -> TokenStream {
     let lib = lib!();
 
-    let Merge { kind, keys, collections } = merge;
+    let Merge {
+        kind,
+        keys,
+        collections,
+    } = merge;
 
     let key_idents = keys.iter().map(|(ident, _)| ident).collect::<Vec<_>>();
-    let collection_idents = collections.iter().map(|(ident, _)| ident).collect::<Vec<_>>();
+    let collection_idents = collections
+        .iter()
+        .map(|(ident, _)| ident)
+        .collect::<Vec<_>>();
 
     let body = match kind {
         MergeKind::Group => {
@@ -160,7 +167,7 @@ fn make_merge(merge: Merge, constructor: &TokenStream, getters: &TokenStream) ->
 
                 Ok(__objects)
             }
-        },
+        }
     };
 
     quote! {

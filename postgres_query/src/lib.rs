@@ -72,7 +72,7 @@
 //! If necessary, queries may be constructed from `&str`s at runtime instead of the usual
 //! compile-time string literals expected by the `query!` macro. This is achieved by using the
 //! [`query_dyn!`] macro instead. In addition to dynamic queries, parameter bindings may also be
-//! dynamically: 
+//! dynamically:
 //!
 //! ```
 //! # use postgres_query::*;
@@ -103,13 +103,13 @@
 //! let query: Result<Query> = query_dyn!(
 //!     &sql,
 //!     name = "John",
-//!     // Forgot to bind the parameter `max_age`. 
+//!     // Forgot to bind the parameter `max_age`.
 //!     // Will result in an error.
 //! );
 //!
 //! assert!(query.is_err());
 //! ```
-//! 
+//!
 //!
 //! # Data Extraction
 //!
@@ -221,13 +221,13 @@
 //! ```
 //!
 //! ### Many-to-one Relationships
-//! 
+//!
 //! In the previous examples we had a `Book` that contained an `Author`. This is what is called a
 //! many-to-one relationship, since one book only has one author, but many books may share the same
 //! author (or so we assume anyway). What if you instead had `Author` an author that contained many
 //! `Book`s? We know that one author may write many books, so that is a one-to-many relationship. We
 //! can write an extractor for that case as well:
-//! 
+//!
 //! ```
 //! # use postgres_query::*;
 //! # use tokio_postgres::Client;
