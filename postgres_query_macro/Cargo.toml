@@ -1,6 +1,6 @@
 [package]
 name = "postgres_query_macro"
-version = "0.3.1"
+version = "0.3.2"
 authors = ["Christofer Nolander <christofer.nolander@gmail.com>"]
 edition = "2018"
 description = "Write and execute SQL queries with ease"
