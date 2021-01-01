@@ -115,7 +115,7 @@ impl GenericClient for Transaction<'_> {
         statement: &Statement,
         parameters: &[&'a (dyn ToSql + Sync)],
     ) -> Result<u64, SqlError> {
-        Transaction::execute_raw::<_, Statement>(self, statement, slice_iter(parameters)).await
+        Transaction::execute_raw::<_, _, Statement>(self, statement, slice_iter(parameters)).await
     }
 
     async fn query_raw<'a>(

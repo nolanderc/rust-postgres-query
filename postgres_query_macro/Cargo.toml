@@ -13,6 +13,6 @@ proc-macro = true
 
 [dependencies]
 proc-macro-hack = "0.5.19"
-quote = "1.0.7"
-syn = { version = "1.0.48", features = ["full"] }
+quote = "1.0.8"
+syn = { version = "1.0.56", features = ["full"] }
 proc-macro2 = "1.0.24"
