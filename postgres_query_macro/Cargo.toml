@@ -1,6 +1,6 @@
 [package]
 name = "postgres_query_macro"
-version = "0.3.2"
+version = "0.3.3"
 authors = ["Christofer Nolander <christofer.nolander@gmail.com>"]
 edition = "2018"
 description = "Write and execute SQL queries with ease"
@@ -13,6 +13,6 @@ proc-macro = true
 
 [dependencies]
 proc-macro-hack = "0.5.19"
-quote = "1.0.7"
-syn = { version = "1.0.48", features = ["full"] }
+quote = "1.0.8"
+syn = { version = "1.0.58", features = ["full"] }
 proc-macro2 = "1.0.24"
