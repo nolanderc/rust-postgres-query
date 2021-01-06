@@ -31,4 +31,4 @@ jobs:
     - name: Run tests
       run: cargo test --verbose --workspace
       env:
-        DATABASE_URL: postgresql://postgres:2UtcMAAvNuBHPqK9@localhost:5432/test-postgres-query
+        POSTGRES_DB_CONFIG: postgresql://postgres:2UtcMAAvNuBHPqK9@localhost:5432/test-postgres-query
