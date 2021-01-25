@@ -8,6 +8,10 @@ use async_trait::async_trait;
 use postgres_types::ToSql;
 use tokio_postgres::{error::Error as SqlError, Client, RowStream, Statement, Transaction};
 
+#[cfg(feature = "deadpool")]
+use deadpool_postgres::{Client as DPClient};
+
+
 /// A generic client with basic functionality.
 #[async_trait]
 pub trait GenericClient {
@@ -77,6 +81,30 @@ impl GenericClient for Client {
         parameters: &[&'a (dyn ToSql + Sync)],
     ) -> Result<RowStream, SqlError> {
         Client::query_raw(self, statement, slice_iter(parameters)).await
+    }
+}
+
+#[cfg(feature = "deadpool")]
+#[async_trait]
+impl GenericClient for DPClient {
+    async fn prepare(&self, sql: &str) -> Result<Statement, SqlError> {
+        DPClient::prepare(self, sql).await
+    }
+
+    async fn execute_raw<'a>(
+        &'a self,
+        statement: &Statement,
+        parameters: &[&'a (dyn ToSql + Sync)],
+    ) -> Result<u64, SqlError> {
+        DPClient::execute_raw(self, statement, parameters).await
+    }
+
+    async fn query_raw<'a>(
+        &'a self,
+        statement: &Statement,
+        parameters: &[&'a (dyn ToSql + Sync)],
+    ) -> Result<RowStream, SqlError> {
+        DPClient::query_raw(self, statement, parameters).await
     }
 }
 
