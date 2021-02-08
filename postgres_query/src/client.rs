@@ -9,7 +9,7 @@ use postgres_types::ToSql;
 use tokio_postgres::{error::Error as SqlError, Client, RowStream, Statement, Transaction};
 
 #[cfg(feature = "deadpool")]
-use deadpool_postgres::{Client as DPClient};
+use deadpool_postgres::{Client as DpClient, ClientWrapper as DpClientWrapper};
 
 
 /// A generic client with basic functionality.
@@ -63,10 +63,12 @@ fn slice_iter<'a>(
 
 #[async_trait]
 impl GenericClient for Client {
+    #[deny(unconditional_recursion)]
     async fn prepare(&self, sql: &str) -> Result<Statement, SqlError> {
         Client::prepare(self, sql).await
     }
 
+    #[deny(unconditional_recursion)]
     async fn execute_raw<'a>(
         &'a self,
         statement: &Statement,
@@ -75,6 +77,7 @@ impl GenericClient for Client {
         Client::execute_raw(self, statement, slice_iter(parameters)).await
     }
 
+    #[deny(unconditional_recursion)]
     async fn query_raw<'a>(
         &'a self,
         statement: &Statement,
@@ -86,25 +89,28 @@ impl GenericClient for Client {
 
 #[cfg(feature = "deadpool")]
 #[async_trait]
-impl GenericClient for DPClient {
+impl GenericClient for DpClient {
+    #[deny(unconditional_recursion)]
     async fn prepare(&self, sql: &str) -> Result<Statement, SqlError> {
-        DPClient::prepare(self, sql).await
+        DpClientWrapper::prepare(self, sql).await
     }
 
+    #[deny(unconditional_recursion)]
     async fn execute_raw<'a>(
         &'a self,
         statement: &Statement,
         parameters: &[&'a (dyn ToSql + Sync)],
     ) -> Result<u64, SqlError> {
-        DPClient::execute_raw(self, statement, parameters).await
+        Client::execute_raw(&*self, statement, slice_iter(parameters)).await
     }
 
+    #[deny(unconditional_recursion)]
     async fn query_raw<'a>(
         &'a self,
         statement: &Statement,
         parameters: &[&'a (dyn ToSql + Sync)],
     ) -> Result<RowStream, SqlError> {
-        DPClient::query_raw(self, statement, parameters).await
+        Client::query_raw(&*self, statement, slice_iter(parameters)).await
     }
 }
 
